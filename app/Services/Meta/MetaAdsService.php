@@ -616,11 +616,22 @@ class MetaAdsService
      *
      * @param  string  $level  account|campaign|adset|ad
      */
+    /** Fields that identify the row at each level; without them a row cannot be attributed. */
+    public const INSIGHT_ID_FIELDS = [
+        'account'  => [],
+        'campaign' => ['campaign_id', 'campaign_name'],
+        'adset'    => ['campaign_id', 'adset_id', 'adset_name'],
+        'ad'       => ['campaign_id', 'adset_id', 'ad_id', 'ad_name'],
+    ];
+
     public function insights(string $objectId, string $level, Carbon $since, Carbon $until, bool $daily = true): array
     {
         $query = [
             'level'        => $level,
-            'fields'       => implode(',', config('meta.ads.insight_fields')),
+            'fields'       => implode(',', array_values(array_unique(array_merge(
+                self::INSIGHT_ID_FIELDS[$level] ?? [],
+                config('meta.ads.insight_fields'),
+            )))),
             'time_range'   => json_encode([
                 'since' => $since->toDateString(),
                 'until' => $until->toDateString(),

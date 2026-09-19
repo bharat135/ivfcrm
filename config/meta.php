@@ -119,10 +119,17 @@ return [
         ],
 
         // Fields requested from the Insights edge.
+        // How far back a form's leads are pulled the first time it is polled.
         'insight_fields' => [
             'impressions', 'reach', 'clicks', 'unique_clicks', 'spend',
             'frequency', 'ctr', 'cpc', 'cpm', 'actions', 'cost_per_action_type',
         ],
+    ],
+
+    'leads' => [
+        // How far back a form's submissions are pulled the first time it is
+        // polled (and by "Pull leads"). Later pulls continue from the watermark.
+        'backfill_days' => (int) env('META_LEADS_BACKFILL_DAYS', 90),
     ],
 
     // Funnel stage slugs used by the Lead -> Visit -> Booking report.

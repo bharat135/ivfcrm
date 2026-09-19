@@ -41,15 +41,11 @@ class SyncMetaLeadFormsJob implements ShouldQueue
         $created = 0;
 
         foreach ($forms as $form) {
-            // last_synced_at is also touched by the hourly metadata sync, so a
-            // window starting exactly there could skip a lead that arrived
-            // seconds before that sync ran.
-            $since = ($form->last_synced_at ?: now()->subDays(7))
-                ->copy()
-                ->subMinutes(self::OVERLAP_MINUTES);
-
+            // The service owns the window: a never-pulled form gets the full
+            // backfill, otherwise it continues from its own watermark with
+            // an overlap so nothing falls between two runs.
             try {
-                $created += $sync->syncFormLeads($form, $since);
+                $created += $sync->syncFormLeads($form);
             } catch (\Throwable $e) {
                 Log::warning('Meta lead form poll failed', [
                     'form_id' => $form->external_id,

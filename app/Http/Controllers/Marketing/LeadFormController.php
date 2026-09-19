@@ -48,7 +48,7 @@ class LeadFormController extends Controller
                     $f->center?->name,
                     $f->assignee?->name,
                 ])->filter()->join(' → ') ?: 'Auto-assign'))
-                ->addColumn('synced', fn (MetaLeadForm $f) => $f->last_synced_at?->diffForHumans() ?? 'Never')
+                ->addColumn('synced', fn (MetaLeadForm $f) => $f->leads_synced_at?->diffForHumans() ?? 'Never')
                 ->addColumn('action', fn (MetaLeadForm $f) => view('marketing.leadforms._actions', ['form' => $f])->render())
                 ->rawColumns(['status_badge', 'action'])
                 ->make(true);
@@ -304,6 +304,10 @@ class LeadFormController extends Controller
             'state_name' => 'State',
             'pincode'    => 'Pincode',
             'message'    => 'Remark / Message',
+            'years_trying'  => 'Trying since (years)',
+            'years_married' => 'Married since (years)',
+            'wife_age'      => "Wife's age",
+            'husband_age'   => "Husband's age",
         ];
     }
 }

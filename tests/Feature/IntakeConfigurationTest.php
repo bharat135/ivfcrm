@@ -426,4 +426,96 @@ class IntakeConfigurationTest extends TestCase
         // The lead-forms screen itself is a marketing screen, so a telecaller cannot fire tests.
         $this->actingAs($this->telecaller)->postJson(route('marketing.leadforms.test', $form))->assertForbidden();
     }
+
+    // =================================================================
+    // Meta spend + lead field mapping + backfill window
+    // =================================================================
+
+    public function test_insight_rows_are_requested_with_their_ids_so_spend_can_be_stored(): void
+    {
+        $settings = app(SettingsRepository::class);
+        $settings->set('meta', 'access_token', 'user-token');
+        $settings->set('meta', 'ad_account_id', 'act_1');
+
+        Http::fake([
+            'graph.facebook.com/*/act_1/insights*' => Http::response(['data' => [[
+                'campaign_id' => 'cmp-ins-1', 'campaign_name' => 'Spend campaign', 'date_start' => now()->subDay()->toDateString(),
+                'date_stop' => now()->subDay()->toDateString(), 'spend' => '2301.03', 'impressions' => '34848', 'clicks' => '289',
+                'actions' => [['action_type' => 'lead', 'value' => '12']],
+            ]]]),
+        ]);
+
+        $written = app(MetaSyncService::class)->syncInsights(now()->subDays(2), now());
+
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'act_1/insights')
+            && str_contains(urldecode($r->url()), 'campaign_id')
+            && str_contains(urldecode($r->url()), 'spend'));
+
+        $this->assertGreaterThanOrEqual(1, $written);
+        $this->assertDatabaseHas('meta_insights', ['level' => 'campaign', 'external_id' => 'cmp-ins-1', 'spend' => 2301.03, 'leads' => 12]);
+    }
+
+    public function test_a_form_keyed_phone_and_a_marathi_years_question_are_imported(): void
+    {
+        $mobile   = $this->mobile();
+        $remoteId = 'lg-map-' . random_int(100000, 999999);
+
+        $created = app(MetaSyncService::class)->importLead([
+            'id'         => $remoteId,
+            'field_data' => [
+                ['name' => 'full_name', 'values' => ['Marathi Couple']],
+                ['name' => 'phone',     'values' => ['+91' . $mobile]],
+                ['name' => 'city',      'values' => ['Shirur']],
+                ['name' => 'तुम्ही_किती_वर्षांपासून_प्रेग्नेंसीसाठी_प्रयत्न_करत_आहात?', 'values' => ['3 वर्ष']],
+            ],
+        ]);
+
+        $this->assertTrue($created);
+
+        $lead = Lead::where('external_lead_id', $remoteId)->first();
+        $this->assertNotNull($lead);
+        $this->assertSame($mobile, substr($lead->mobile, -10));
+        $this->assertSame(3, $lead->years_trying);
+        $this->assertSame(3, Patient::where('lead_id', $lead->id)->first()?->years_trying);
+    }
+
+    public function test_a_never_pulled_form_backfills_ninety_days_then_continues_from_its_own_watermark(): void
+    {
+        $settings = app(SettingsRepository::class);
+        $settings->set('meta', 'access_token', 'user-token');
+        $settings->set('meta', 'page_id', '111222333');
+        $settings->set('meta', 'page_tokens', ['111222333' => 'page-token']);
+
+        $form = \App\Models\MetaLeadForm::create([
+            'external_id' => 'form-w-' . random_int(100000, 999999), 'page_id' => '111222333', 'name' => 'Watermark form',
+            'status' => 'ACTIVE', 'auto_sync' => true,
+            'last_synced_at' => now()->subMinutes(5), // metadata sync just ran; must NOT narrow the lead window
+        ]);
+
+        Http::fake(['graph.facebook.com/*/' . $form->external_id . '/leads*' => Http::response(['data' => []])]);
+
+        app(MetaSyncService::class)->syncFormLeads($form);
+
+        Http::assertSent(function ($r) {
+            parse_str(parse_url($r->url(), PHP_URL_QUERY) ?? '', $q);
+            $filter = json_decode($q['filtering'] ?? '[]', true)[0] ?? [];
+            $since  = \Illuminate\Support\Carbon::createFromTimestamp((int) ($filter['value'] ?? 0));
+
+            return $since->between(now()->subDays(91), now()->subDays(89));
+        });
+
+        $this->assertNotNull($form->fresh()->leads_synced_at);
+
+        // Second pull: from the watermark (with overlap), not from 90 days ago.
+        Http::fake(['graph.facebook.com/*/' . $form->external_id . '/leads*' => Http::response(['data' => []])]);
+        app(MetaSyncService::class)->syncFormLeads($form->fresh());
+
+        Http::assertSent(function ($r) {
+            parse_str(parse_url($r->url(), PHP_URL_QUERY) ?? '', $q);
+            $filter = json_decode($q['filtering'] ?? '[]', true)[0] ?? [];
+            $since  = \Illuminate\Support\Carbon::createFromTimestamp((int) ($filter['value'] ?? 0));
+
+            return $since->gt(now()->subHour());
+        });
+    }
 }

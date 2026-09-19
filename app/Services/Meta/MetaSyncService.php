@@ -270,7 +270,13 @@ class MetaSyncService
      */
     public function syncFormLeads(MetaLeadForm $form, ?Carbon $since = null): int
     {
-        $since = $since ?: ($form->last_synced_at ?: now()->subDays(7));
+        // A form that has never had its leads pulled starts with a long
+        // backfill; afterwards the pull continues from its own watermark
+        // (never from last_synced_at, which the hourly metadata sync moves).
+        $since = $since ?: ($form->leads_synced_at
+            ? $form->leads_synced_at->copy()->subMinutes(30)
+            : now()->subDays((int) config('meta.leads.backfill_days', 90)));
+
         $created = 0;
 
         foreach ($this->ads->formLeads($form->external_id, $since, $form->page_id) as $remote) {
@@ -279,7 +285,7 @@ class MetaSyncService
             }
         }
 
-        $form->update(['last_synced_at' => now()]);
+        $form->update(['leads_synced_at' => now()]);
 
         return $created;
     }
@@ -312,10 +318,19 @@ class MetaSyncService
         $mapped = [];
 
         foreach ($answers as $key => $value) {
-            $target = $map[$key] ?? null;
+            $target = $map[$key] ?? MetaLeadForm::guessTarget((string) $key);
             if ($target && $value !== null && $value !== '') {
                 // A form may ask both first_name and full_name; keep the first hit.
                 $mapped[$target] = $mapped[$target] ?? $value;
+            }
+        }
+
+        // "How many years have you been trying?" style answers become dates
+        // so the number keeps counting, exactly as on the lead form.
+        $coupleDates = [];
+        foreach (['years_trying' => 'trying_since', 'years_married' => 'marriage_date', 'wife_age' => 'wife_dob', 'husband_age' => 'husband_dob'] as $yearsKey => $dateKey) {
+            if (isset($mapped[$yearsKey]) && preg_match('/\d{1,3}/', (string) $mapped[$yearsKey], $m)) {
+                $coupleDates[$dateKey] = \App\Support\CoupleDates::dateFromYears((int) $m[0])?->toDateString();
             }
         }
 
@@ -348,7 +363,7 @@ class MetaSyncService
             'remark'           => $mapped['message'] ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
-        $payload = array_merge($payload, $attribution);
+        $payload = array_merge($payload, $attribution, array_filter($coupleDates));
 
         $payload['extra'] = [
             'meta_lead_id'  => $externalId,
