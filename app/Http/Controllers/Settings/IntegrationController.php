@@ -211,7 +211,17 @@ class IntegrationController extends Controller
                 'message' => 'Page subscribed. New Lead Ads submissions will now arrive through the webhook in real time.',
             ]);
         } catch (MetaException $e) {
-            return response()->json(['success' => false, 'message' => $e->displayMessage()], 422);
+            $message = $e->displayMessage();
+
+            // Meta's own wording hides the fix: the token was generated without
+            // the Page-management scope, so it can read leads but not subscribe.
+            if (str_contains($e->getMessage(), 'pages_manage_metadata')) {
+                $message .= ' Generate a new system-user token in Meta Business Settings with the pages_manage_metadata, '
+                    . 'pages_read_engagement and leads_retrieval permissions, save it on the Meta tab, click Discover, then try again. '
+                    . 'Until then leads still arrive through the 15-minute poll.';
+            }
+
+            return response()->json(['success' => false, 'message' => $message], 422);
         }
     }
 
