@@ -16,7 +16,8 @@ return [
     'graph_url'     => env('META_GRAPH_URL', 'https://graph.facebook.com'),
 
     // Seconds before an outbound Graph call is abandoned.
-    'timeout'       => (int) env('META_HTTP_TIMEOUT', 30),
+    // Insight pulls return hundreds of KB per page; 30s was not enough.
+    'timeout'       => (int) env('META_HTTP_TIMEOUT', 90),
     'retries'       => (int) env('META_HTTP_RETRIES', 2),
 
     // Fallbacks used only when the corresponding setting row is empty.

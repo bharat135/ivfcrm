@@ -636,7 +636,7 @@ class MetaAdsService
                 'since' => $since->toDateString(),
                 'until' => $until->toDateString(),
             ]),
-            'limit'        => 500,
+            'limit'        => 200,
         ];
 
         if ($daily) {

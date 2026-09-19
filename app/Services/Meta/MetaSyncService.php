@@ -153,12 +153,26 @@ class MetaSyncService
 
         $written = 0;
 
+        // One request per level and per week: a month of daily rows for the
+        // whole account is several hundred KB and used to time out, which
+        // aborted the entire sync and left every spend figure at zero.
+        $windows = [];
+        for ($start = $since->copy()->startOfDay(); $start->lte($until); $start = $start->copy()->addDays(7)) {
+            $windows[] = [$start->copy(), $start->copy()->addDays(6)->min($until)];
+        }
+
         foreach (['campaign', 'adset', 'ad'] as $level) {
-            try {
-                $rows = $this->ads->accountInsights($since, $until, $level);
-            } catch (MetaException $e) {
-                Log::warning("Meta insights sync failed at {$level} level", ['error' => $e->getMessage()]);
-                continue;
+            $rows = [];
+
+            foreach ($windows as [$from, $to]) {
+                try {
+                    $rows = array_merge($rows, $this->ads->accountInsights($from, $to, $level));
+                } catch (\Throwable $e) {
+                    Log::warning("Meta insights sync failed at {$level} level", [
+                        'window' => $from->toDateString() . '..' . $to->toDateString(),
+                        'error'  => $e->getMessage(),
+                    ]);
+                }
             }
 
             foreach ($rows as $row) {
