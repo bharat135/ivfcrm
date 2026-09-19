@@ -27,7 +27,7 @@ if command -v mysqldump >/dev/null 2>&1; then
   if [ -n "$DB_DATABASE" ]; then
     mkdir -p storage/backups
     BACKUP="storage/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql.gz"
-    MYSQL_PWD="$DB_PASSWORD" mysqldump --single-transaction --quick -u "$DB_USERNAME" "$DB_DATABASE" 2>/dev/null | gzip > "$BACKUP" \
+    MYSQL_PWD="$DB_PASSWORD" mysqldump --no-tablespaces --single-transaction --quick -u "$DB_USERNAME" "$DB_DATABASE" 2>/dev/null | gzip > "$BACKUP" \
       && echo "==> DB backup: $BACKUP" || echo "!! DB backup skipped (mysqldump failed)"
     ls -1t storage/backups/pre-deploy-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
   fi
