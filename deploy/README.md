@@ -25,6 +25,10 @@ caches, queue restart).
 
 ## cPanel notes
 
+Full walkthrough for running the app on cPanel against the VPS database:
+[docs/CPANEL_HOSTING.md](../docs/CPANEL_HOSTING.md). Env template: `deploy/env.cpanel.example`;
+VPS side: `deploy/vps-allow-remote-db.sh <cpanel-ip>`.
+
 - Point the domain's document root at `<DEPLOY_PATH>/public`.
 - Enable SSH access for the account (cPanel → SSH Access) and add the key there.
 - Create a cron job `* * * * * <php> <DEPLOY_PATH>/artisan schedule:run` and a

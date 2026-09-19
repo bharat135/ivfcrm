@@ -24,10 +24,12 @@ if command -v mysqldump >/dev/null 2>&1; then
   DB_DATABASE=$(grep -E '^DB_DATABASE=' .env | cut -d= -f2- | tr -d '"' || true)
   DB_USERNAME=$(grep -E '^DB_USERNAME=' .env | cut -d= -f2- | tr -d '"' || true)
   DB_PASSWORD=$(grep -E '^DB_PASSWORD=' .env | cut -d= -f2- | tr -d '"' || true)
+  DB_HOST=$(grep -E '^DB_HOST=' .env | cut -d= -f2- | tr -d '"' || true)
+  DB_PORT=$(grep -E '^DB_PORT=' .env | cut -d= -f2- | tr -d '"' || true)
   if [ -n "$DB_DATABASE" ]; then
     mkdir -p storage/backups
     BACKUP="storage/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql.gz"
-    MYSQL_PWD="$DB_PASSWORD" mysqldump --no-tablespaces --single-transaction --quick -u "$DB_USERNAME" "$DB_DATABASE" 2>/dev/null | gzip > "$BACKUP" \
+    MYSQL_PWD="$DB_PASSWORD" mysqldump --no-tablespaces --single-transaction --quick -h "${DB_HOST:-127.0.0.1}" -P "${DB_PORT:-3306}" -u "$DB_USERNAME" "$DB_DATABASE" 2>/dev/null | gzip > "$BACKUP" \
       && echo "==> DB backup: $BACKUP" || echo "!! DB backup skipped (mysqldump failed)"
     ls -1t storage/backups/pre-deploy-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
   fi

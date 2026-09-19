@@ -1,0 +1,10 @@
+---
+# cPanel → Git Version Control → "Deploy HEAD commit". Only copies files;
+# vendor/ and public/build must already exist on the server (first time:
+# run composer install and npm run build over SSH, or use the GitHub Actions
+# workflow instead, which builds everything and needs only SSH access).
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/CPANEL_ACCOUNT/ivfcrm
+    - /bin/rsync -a --delete --exclude .git --exclude .env --exclude storage --exclude vendor --exclude node_modules --exclude public/build --exclude bootstrap/cache ./ $DEPLOYPATH/
+    - cd $DEPLOYPATH && /usr/local/bin/ea-php83 artisan migrate --force && /usr/local/bin/ea-php83 artisan config:cache && /usr/local/bin/ea-php83 artisan route:cache && /usr/local/bin/ea-php83 artisan view:cache && /usr/local/bin/ea-php83 artisan queue:restart
