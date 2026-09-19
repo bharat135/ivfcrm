@@ -1,0 +1,103 @@
+name: Deploy to production
+
+# Every push to main is built here and shipped to the server over SSH.
+# The server never needs git, node or composer dev packages: vendor/ and the
+# compiled assets are built in this runner and copied across with rsync.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST        server hostname or IP            e.g. 103.174.102.91
+#   DEPLOY_USER        SSH user                         e.g. root  (cPanel: the account username)
+#   DEPLOY_SSH_KEY     private key whose public half is in that user's ~/.ssh/authorized_keys
+#   DEPLOY_PATH        absolute path of the Laravel app on the server
+#                      e.g. /var/www/ivfcrm  (cPanel: /home/<account>/ivfcrm)
+# Optional:
+#   DEPLOY_PORT        SSH port, defaults to 22
+#   DEPLOY_PHP         php binary on the server, defaults to "php" (cPanel: /usr/local/bin/ea-php83)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Lint every PHP file
+        run: |
+          find app database routes config bootstrap tests -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -l > /dev/null
+
+  deploy:
+    name: Build and ship
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, intl, bcmath, pdo_mysql, gd, zip, redis
+          coverage: none
+
+      - name: Install PHP dependencies (production only)
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build front-end assets
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Load the deploy key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.DEPLOY_PORT || 22 }}" -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copy the release to the server
+        env:
+          PORT: ${{ secrets.DEPLOY_PORT || 22 }}
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p $PORT -o ServerAliveInterval=15" \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude 'storage/app/**' \
+            --exclude 'storage/logs/**' \
+            --exclude 'storage/framework/cache/**' \
+            --exclude 'storage/framework/sessions/**' \
+            --exclude 'storage/framework/views/**' \
+            --exclude 'bootstrap/cache/**' \
+            --exclude 'public/storage' \
+            --exclude 'tests' \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+
+      - name: Migrate, cache and restart workers
+        env:
+          PORT: ${{ secrets.DEPLOY_PORT || 22 }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$PORT" -o ServerAliveInterval=15 \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "DEPLOY_PHP='${{ secrets.DEPLOY_PHP }}' bash '${{ secrets.DEPLOY_PATH }}/deploy/post-deploy.sh' '${{ secrets.DEPLOY_PATH }}'"

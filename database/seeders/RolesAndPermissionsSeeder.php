@@ -1,0 +1,157 @@
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
+
+class RolesAndPermissionsSeeder extends Seeder
+{
+    public function run(): void
+    {
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+        $modules = [
+            'leads', 'patients', 'appointments', 'followups', 'call_logs',
+            'campaigns', 'lead_sources', 'doctors', 'centers', 'users',
+            'roles', 'dispositions', 'pipeline_stages', 'assignment_rules',
+            'lead_imports', 'reports', 'settings', 'counselling', 'treatments',
+            // WhatsApp + Meta marketing suite
+            'conversations', 'whatsapp_templates', 'whatsapp_flows', 'broadcasts', 'landing_pages', 'integrations',
+            // Telephony (Asterisk / MicroSIP / WhatsApp calling)
+            'telephony',
+            // Tata Teleservices (Smartflo) configuration + sync + broadcasts
+            'tata',
+        ];
+
+        $actions = ['view', 'create', 'edit', 'delete', 'export', 'approve'];
+
+        foreach ($modules as $module) {
+            foreach ($actions as $action) {
+                Permission::firstOrCreate(['name' => "{$module}.{$action}"]);
+            }
+        }
+
+        // Extra cross-cutting permissions
+        foreach (['reassign_leads', 'view_all_leads', 'view_own_leads', 'bulk_actions', 'access_api'] as $perm) {
+            Permission::firstOrCreate(['name' => $perm]);
+        }
+
+        $roleDefinitions = [
+            'Super Admin' => ['*'], // assigned programmatically
+            'Admin' => [
+                'leads.*', 'patients.*', 'appointments.*', 'followups.*', 'call_logs.*',
+                'campaigns.*', 'lead_sources.*', 'doctors.*', 'centers.*', 'users.*',
+                'roles.*', 'dispositions.*', 'pipeline_stages.*', 'assignment_rules.*',
+                'lead_imports.*', 'reports.*', 'settings.*', 'counselling.*', 'treatments.*',
+                'conversations.*', 'whatsapp_templates.*', 'whatsapp_flows.*', 'broadcasts.*', 'landing_pages.*',
+                'integrations.*', 'telephony.*', 'tata.*',
+                'view_all_leads', 'reassign_leads', 'bulk_actions', 'access_api',
+            ],
+            'Management' => [
+                'leads.*', 'patients.*', 'appointments.*', 'followups.*', 'call_logs.*',
+                'campaigns.*', 'lead_sources.*', 'doctors.*', 'centers.*', 'users.*',
+                'roles.*', 'dispositions.*', 'pipeline_stages.*', 'assignment_rules.*',
+                'reports.*', 'counselling.*', 'treatments.*',
+                'conversations.*', 'whatsapp_templates.*', 'whatsapp_flows.*', 'broadcasts.*', 'landing_pages.*',
+                'integrations.view', 'telephony.*', 'tata.view', 'tata.edit',
+                'view_all_leads', 'reassign_leads', 'bulk_actions',
+            ],
+            'Marketing Head' => [
+                'leads.view', 'leads.create', 'leads.edit', 'leads.export', 'assignment_rules.*',
+                'campaigns.*', 'lead_sources.*', 'reports.view', 'reports.export',
+                'conversations.*', 'whatsapp_templates.*', 'whatsapp_flows.*', 'broadcasts.*', 'landing_pages.*',
+                'integrations.view', 'integrations.edit',
+                'view_all_leads', 'bulk_actions',
+            ],
+            'Marketing Executive' => [
+                'leads.view', 'leads.create', 'leads.edit', 'leads.export',
+                'campaigns.view', 'campaigns.create', 'campaigns.edit',
+                'lead_sources.view', 'reports.view',
+                'conversations.view', 'conversations.create', 'conversations.edit',
+                'whatsapp_templates.view', 'whatsapp_templates.create',
+                'whatsapp_flows.view', 'whatsapp_flows.create',
+                'broadcasts.view', 'broadcasts.create',
+                'landing_pages.*',
+                'view_all_leads',
+            ],
+            'Center Manager' => [
+                'leads.*', 'patients.*', 'appointments.*', 'followups.*', 'call_logs.*',
+                'doctors.view', 'reports.view', 'reports.export', 'counselling.*',
+                'conversations.*', 'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
+                'broadcasts.view', 'broadcasts.create', 'telephony.view', 'telephony.edit',
+                'tata.view', 'tata.edit', 'tata.create',
+                'view_all_leads', 'reassign_leads',
+            ],
+            'Doctor' => [
+                'patients.view', 'patients.edit', 'appointments.view', 'appointments.edit',
+                'treatments.*', 'counselling.view',
+            ],
+            'IVF Coordinator' => [
+                'patients.*', 'appointments.*', 'treatments.*', 'counselling.*',
+                'leads.view', 'followups.view',
+            ],
+            'Counsellor' => [
+                'leads.view', 'leads.create', 'leads.edit', 'patients.view', 'patients.edit',
+                'appointments.*', 'counselling.*', 'followups.*',
+                'conversations.view', 'conversations.create', 'conversations.edit',
+                'whatsapp_templates.view',
+            ],
+            'Telecaller' => [
+                'leads.view', 'leads.create', 'leads.edit', 'followups.*', 'call_logs.*',
+                'appointments.view', 'appointments.create',
+                'conversations.view', 'conversations.create', 'conversations.edit',
+                'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
+                'view_own_leads',
+            ],
+            'Call Quality Analyst' => [
+                'call_logs.view', 'call_logs.export', 'leads.view', 'reports.view',
+                'telephony.view',
+            ],
+            'Receptionist' => [
+                'appointments.*', 'patients.view', 'patients.create',
+                'leads.view', 'leads.create',
+                'conversations.view', 'conversations.create',
+            ],
+            'Finance' => [
+                'reports.*', 'patients.view', 'treatments.view',
+            ],
+            'Patient Support' => [
+                'patients.view', 'patients.edit', 'followups.*', 'appointments.view',
+                'conversations.view', 'conversations.create', 'conversations.edit',
+                'whatsapp_templates.view',
+            ],
+            'Viewer' => [
+                'leads.view', 'patients.view', 'reports.view',
+            ],
+        ];
+
+        $allPerms = Permission::pluck('name')->toArray();
+
+        foreach ($roleDefinitions as $roleName => $perms) {
+            $role = Role::firstOrCreate(['name' => $roleName]);
+
+            if ($perms === ['*']) {
+                $role->syncPermissions($allPerms);
+                continue;
+            }
+
+            $toAssign = [];
+            foreach ($perms as $perm) {
+                if (str_ends_with($perm, '.*')) {
+                    $module = str_replace('.*', '', $perm);
+                    foreach ($allPerms as $p) {
+                        if (str_starts_with($p, $module . '.')) {
+                            $toAssign[] = $p;
+                        }
+                    }
+                } else {
+                    $toAssign[] = $perm;
+                }
+            }
+            $role->syncPermissions(array_filter(array_unique($toAssign), fn($p) => in_array($p, $allPerms)));
+        }
+    }
+}
