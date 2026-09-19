@@ -15,6 +15,7 @@ use App\Services\Meta\MetaException;
 use App\Services\Meta\MetaSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Yajra\DataTables\Facades\DataTables;
 
 /**
@@ -98,6 +99,63 @@ class LeadFormController extends Controller
             'message' => $created > 0
                 ? "Imported {$created} new lead(s)."
                 : 'No new leads found for this period.',
+        ]);
+    }
+
+    /**
+     * Push a synthetic submission through exactly the path a real Lead Ads
+     * submission takes (field map, campaign routing, dedup, assignment,
+     * patient file), so routing can be checked without spending ad money.
+     */
+    public function testLead(Request $request, MetaLeadForm $form): JsonResponse
+    {
+        $stamp    = now()->format('dmy-His');
+        $remoteId = 'test-' . $form->id . '-' . Str::lower(Str::random(8));
+        $mobile   = '+919' . str_pad((string) random_int(0, 999999999), 9, '0', STR_PAD_LEFT);
+        $campaign = $form->campaign_id ? Campaign::find($form->campaign_id) : null;
+
+        $remote = [
+            'id'           => $remoteId,
+            'created_time' => now()->toIso8601String(),
+            'form_id'      => $form->external_id,
+            'campaign_id'  => $campaign?->external_id,
+            'platform'     => 'facebook',
+            'is_organic'   => false,
+            'field_data'   => [
+                ['name' => 'full_name',    'values' => ['Test Lead ' . $stamp]],
+                ['name' => 'phone_number', 'values' => [$mobile]],
+                ['name' => 'email',        'values' => ['test-' . $stamp . '@example.com']],
+                ['name' => 'city',         'values' => ['Test City']],
+            ],
+        ];
+
+        $created = $this->sync->importLead($remote, $form, ['is_test' => true]);
+        $lead    = Lead::where('external_lead_id', $remoteId)->with(['assignedTo:id,name', 'center:id,name', 'source:id,name'])->first();
+
+        if (! $created || ! $lead) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The test submission did not turn into a lead. Check the field mapping (a phone question must map to Mobile) and the application log.',
+            ], 422);
+        }
+
+        // Mark it unmistakably as a test so it can be filtered or deleted later.
+        $lead->forceFill([
+            'remark' => trim(($lead->remark ? $lead->remark . ' ' : '') . '[TEST LEAD created from lead form "' . $form->name . '" by ' . $request->user()->name . ']'),
+            'extra'  => array_merge($lead->extra ?? [], ['is_test' => true, 'test_by' => $request->user()->id]),
+        ])->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => sprintf(
+                'Test lead created: %s → %s, centre %s, assigned to %s, source %s.',
+                $lead->name,
+                $campaign ? 'campaign "' . $campaign->name . '"' : 'no campaign linked to this form',
+                $lead->center?->name ?? 'none',
+                $lead->assignedTo?->name ?? 'nobody (check Settings → Lead Assignment)',
+                $lead->source?->name ?? 'none',
+            ),
+            'url' => route('leads.show', $lead),
         ]);
     }
 

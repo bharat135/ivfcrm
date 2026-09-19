@@ -543,7 +543,9 @@ class CallService
             'direction'        => $direction,
             'from_number'      => $direction === 'inbound' ? $customer : ($data['from_number'] ?? null),
             'to_number'        => $direction === 'inbound' ? ($data['to_number'] ?? null) : $customer,
-            'extension'        => $data['extension'] ?? $data['agent_number'] ?? null,
+            'extension'        => isset($data['extension']) || isset($data['agent_number'])
+                ? mb_substr((string) ($data['extension'] ?? $data['agent_number']), 0, 64)
+                : null,
             'queue'            => $data['queue'] ?? null,
             'provider_call_id' => $data['provider_call_id'] ?? null,
             'channel_id'       => $data['channel_id'] ?? null,

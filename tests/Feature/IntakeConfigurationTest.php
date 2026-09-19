@@ -365,4 +365,65 @@ class IntakeConfigurationTest extends TestCase
         $this->assertNotNull($client->tokenExpiresAt());
         $this->assertFalse($client->tokenNeedsRefresh(60));
     }
+
+    // =================================================================
+    // Smartflo disposition codes, CDR pull, test leads
+    // =================================================================
+
+    public function test_smartflo_disposition_codes_are_at_most_five_characters_and_unique(): void
+    {
+        $sync  = app(\App\Services\Telephony\Tata\TataSyncService::class);
+        $codes = Disposition::where('is_active', true)->get()->map(fn ($d) => $sync->smartfloCode($d));
+
+        $this->assertTrue($codes->every(fn ($c) => mb_strlen($c) >= 1 && mb_strlen($c) <= 5), 'Smartflo rejects codes over 5 characters: ' . $codes->join(','));
+        $this->assertSame($codes->count(), $codes->unique()->count(), 'Codes must be unique: ' . $codes->join(','));
+        $this->assertSame('NLFT', $sync->smartfloCode(Disposition::where('slug', 'not-looking-for-treatment')->firstOrFail()));
+    }
+
+    public function test_a_smartflo_call_record_with_a_long_extension_is_stored(): void
+    {
+        $call = app(\App\Services\Telephony\CallService::class)->recordExternal([
+            'provider'     => 'tata',
+            'direction'    => 'outbound',
+            'from_number'  => '+917965083657',
+            'to_number'    => $this->mobile(),
+            'agent_number' => 'Extension-0608031380004',
+            'channel_id'   => 'cdr-' . random_int(1000, 9999),
+            'started_at'   => now()->toDateTimeString(),
+        ]);
+
+        $this->assertNotNull($call->id);
+        $this->assertSame('Extension-0608031380004', $call->fresh()->extension);
+    }
+
+    public function test_a_test_lead_runs_through_the_real_import_path_and_is_flagged(): void
+    {
+        $center   = Center::where('is_active', true)->first();
+        $campaign = Campaign::create([
+            'name' => 'Test-lead campaign', 'external_id' => 'cmp-t-' . random_int(100000, 999999),
+            'platform' => 'meta', 'status' => 'ACTIVE', 'is_active' => true,
+            'center_id' => $center->id, 'assign_to' => $this->telecaller->id,
+        ]);
+        $form = \App\Models\MetaLeadForm::create([
+            'external_id' => 'form-t-' . random_int(100000, 999999), 'page_id' => '1', 'name' => 'Test button form',
+            'status' => 'ACTIVE', 'campaign_id' => $campaign->id,
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->postJson(route('marketing.leadforms.test', $form))
+            ->assertOk()
+            ->assertJson(['success' => true]);
+
+        $lead = Lead::where('external_lead_id', 'like', 'test-' . $form->id . '-%')->first();
+        $this->assertNotNull($lead);
+        $this->assertTrue((bool) ($lead->extra['is_test'] ?? false));
+        $this->assertStringContainsString('TEST LEAD', (string) $lead->remark);
+        $this->assertSame($campaign->id, $lead->campaign_id);
+        $this->assertSame($center->id, $lead->center_id);
+        $this->assertSame($this->telecaller->id, $lead->assigned_to);
+        $this->assertSame(route('leads.show', $lead), $response->json('url'));
+
+        // The lead-forms screen itself is a marketing screen, so a telecaller cannot fire tests.
+        $this->actingAs($this->telecaller)->postJson(route('marketing.leadforms.test', $form))->assertForbidden();
+    }
 }

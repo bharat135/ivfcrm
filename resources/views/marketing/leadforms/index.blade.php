@@ -350,6 +350,41 @@ $(function () {
             .fail(xhr => toastr.error(xhr.responseJSON?.message || 'Save failed.'));
     });
 
+    // --- Test lead -------------------------------------------------------
+    // Runs a fake submission through the real import path so routing,
+    // assignment and the field map can be checked before ads go live.
+    $(document).on('click', '.js-test-lead', function () {
+        const id   = $(this).data('id');
+        const name = $(this).data('name');
+        const $btn = $(this);
+
+        Swal.fire({
+            title: 'Add a test lead?',
+            text: `A fake submission will be pushed through "${name}" exactly like a real Meta lead: field mapping, campaign routing, assignment and the patient file.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Create test lead',
+        }).then(r => {
+            if (!r.isConfirmed) return;
+            $btn.prop('disabled', true);
+
+            $.post(`{{ url('marketing/lead-forms') }}/${id}/test-lead`)
+                .done(res => {
+                    table.ajax.reload(null, false);
+                    Swal.fire({
+                        title: 'Test lead created',
+                        text: res.message,
+                        icon: 'success',
+                        showCancelButton: true,
+                        confirmButtonText: 'Open lead',
+                        cancelButtonText: 'Close',
+                    }).then(x => { if (x.isConfirmed && res.url) window.location.href = res.url; });
+                })
+                .fail(xhr => toastr.error(xhr.responseJSON?.message || 'Could not create the test lead.'))
+                .always(() => $btn.prop('disabled', false));
+        });
+    });
+
     // --- Pull leads ------------------------------------------------------
     $(document).on('click', '.js-pull', function () {
         const id = $(this).data('id');

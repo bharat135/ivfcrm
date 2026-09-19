@@ -97,6 +97,7 @@ Route::prefix('marketing')->name('marketing.')->group(function () {
         Route::get('/{form}/edit', [LeadFormController::class, 'edit'])->name('edit');
         Route::put('/{form}', [LeadFormController::class, 'update'])->middleware('can:campaigns.edit')->name('update');
         Route::post('/{form}/pull-leads', [LeadFormController::class, 'pullLeads'])->name('pull');
+        Route::post('/{form}/test-lead', [LeadFormController::class, 'testLead'])->middleware('can:leads.create')->name('test');
         Route::delete('/{form}', [LeadFormController::class, 'destroy'])->middleware('can:campaigns.delete')->name('destroy');
     });
 

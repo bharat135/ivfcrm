@@ -7,6 +7,12 @@
         <i class="bi bi-cloud-download"></i>
     </button>
 
+    @can('leads.create')
+        <button class="btn btn-outline-warning js-test-lead" data-id="{{ $form->id }}" data-name="{{ $form->name }}" title="Add a test lead through this form">
+            <i class="bi bi-bug"></i>
+        </button>
+    @endcan
+
     @can('campaigns.delete')
         <button class="btn btn-outline-danger js-delete" data-id="{{ $form->id }}" title="Remove from CRM">
             <i class="bi bi-trash"></i>

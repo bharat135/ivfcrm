@@ -442,7 +442,10 @@ class TataSyncService
             $disposition = $link->disposition_id ? Disposition::find($link->disposition_id) : null;
 
             if (! $disposition) {
-                $disposition = Disposition::where('slug', $code)->first();
+                // Codes pushed by the CRM are short initials, so the name is
+                // the reliable way back to the CRM disposition.
+                $disposition = Disposition::where('slug', $code)->first()
+                    ?? Disposition::where('name', $row['name'])->first();
             }
 
             if (! $disposition) {
@@ -525,10 +528,11 @@ class TataSyncService
 
     private function pushOne(Disposition $disposition, string $listId, ?string $parentRemoteId): void
     {
-        $link = TataDisposition::firstOrNew(['smartflo_list_id' => $listId, 'code' => $disposition->slug]);
+        $code = $this->smartfloCode($disposition);
+        $link = TataDisposition::firstOrNew(['smartflo_list_id' => $listId, 'code' => $code]);
 
         try {
-            $this->tata->createDispositionStatus($disposition->name, $disposition->slug, $listId, $parentRemoteId);
+            $this->tata->createDispositionStatus($disposition->name, $code, $listId, $parentRemoteId);
 
             $link->fill([
                 'disposition_id'     => $disposition->id,
@@ -550,6 +554,55 @@ class TataSyncService
 
             Log::warning('Smartflo disposition push failed', ['disposition' => $disposition->slug, 'error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Smartflo limits a disposition status code to 5 characters ("The code
+     * may not be greater than 5 characters."), so the CRM slug cannot be sent
+     * as-is. Codes are the initials of the name, disambiguated with a digit,
+     * computed over the whole active list so they stay stable between runs.
+     * An already-linked disposition keeps whatever code Smartflo knows it by.
+     */
+    public function smartfloCode(Disposition $disposition): string
+    {
+        static $codes = null;
+
+        $known = TataDisposition::where('disposition_id', $disposition->id)->value('code');
+        if ($known && mb_strlen($known) <= 5) {
+            return $known;
+        }
+
+        if ($codes === null) {
+            $codes = [];
+            $taken = TataDisposition::whereNotNull('code')->pluck('code')->map(fn ($c) => strtoupper($c))->all();
+
+            foreach (Disposition::where('is_active', true)->orderBy('parent_id')->orderBy('sort_order')->orderBy('id')->get() as $d) {
+                $base = self::initials($d->name);
+                $candidate = $base;
+                $n = 1;
+
+                while (in_array($candidate, $taken, true) || in_array($candidate, $codes, true)) {
+                    $suffix = (string) $n++;
+                    $candidate = mb_substr($base, 0, 5 - mb_strlen($suffix)) . $suffix;
+                }
+
+                $codes[$d->id] = $candidate;
+            }
+        }
+
+        return $codes[$disposition->id] ?? self::initials($disposition->name);
+    }
+
+    /** "Not Looking for Treatment" -> "NLFT"; a one-word name uses its first five letters. */
+    private static function initials(string $name): string
+    {
+        $words = preg_split('/[^A-Za-z0-9]+/', $name, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        $code = count($words) > 1
+            ? implode('', array_map(fn ($w) => mb_substr($w, 0, 1), $words))
+            : ($words[0] ?? 'DISP');
+
+        return strtoupper(mb_substr($code, 0, 5)) ?: 'DISP';
     }
 
     /** Smartflo status id for a CRM disposition, if synced. */
