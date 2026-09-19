@@ -125,8 +125,11 @@ class LeadService
             'assigned_at'   => now(),
         ]);
 
-        $this->logActivity($lead, 'assignment', 'Lead Reassigned',
-            "From user #{$previousUser} to #{$toUserId}. Reason: {$reason}");
+        $fromName = $previousUser ? (\App\Models\User::find($previousUser)?->name ?? "#{$previousUser}") : 'nobody';
+        $toName   = \App\Models\User::find($toUserId)?->name ?? "#{$toUserId}";
+
+        $this->logActivity($lead, 'assignment', "Owner changed to {$toName}",
+            "From {$fromName} to {$toName}" . ($reason !== '' ? ". Reason: {$reason}" : '.'));
 
         return $lead->refresh();
     }

@@ -84,7 +84,11 @@
     <span class="rail-label"><i class="bi bi-telephone"></i>Phone</span>
     <span class="rail-value">
         @if($patient->mobile)
-            <a href="tel:{{ $patient->mobile }}">{{ $patient->mobile }}</a>
+            @if(\App\Support\PhoneNumber::canView())
+                <a href="tel:{{ $patient->mobile }}">{{ $patient->mobile }}</a>
+            @else
+                <span title="Number hidden — use the Call button">{{ \App\Support\PhoneNumber::mask($patient->mobile) }}</span>
+            @endif
         @else
             <span class="text-muted">—</span>
         @endif
@@ -113,6 +117,30 @@
         @endif
     </span>
 </div>
+
+@if($lead && auth()->user()->can('update', $lead))
+    {{-- Change the centre right here; the patient file follows and the log records who did it. --}}
+    <div class="rail-row">
+        <span class="rail-label"><i class="bi bi-arrow-left-right"></i>Move to</span>
+        <span class="rail-value">
+            <select class="form-select form-select-sm js-lead-center" data-url="{{ route('leads.center', $lead) }}" style="max-width: 170px; display: inline-block">
+                @foreach(\App\Models\Center::where('is_active', true)->orderBy('name')->get(['id', 'name']) as $c)
+                    <option value="{{ $c->id }}" @selected($lead->center_id == $c->id)>{{ $c->name }}</option>
+                @endforeach
+            </select>
+        </span>
+    </div>
+    @push('scripts')
+    <script>
+    $(document).on('change', '.js-lead-center', function () {
+        const $s = $(this).prop('disabled', true);
+        $.ajax({ url: $s.data('url'), method: 'PATCH', data: { _token: '{{ csrf_token() }}', center_id: $s.val() } })
+            .done(res => { toastr.success(res.message); setTimeout(() => window.location.reload(), 600); })
+            .fail(xhr => { toastr.error(xhr.responseJSON?.message || 'Could not change the centre.'); $s.prop('disabled', false); });
+    });
+    </script>
+    @endpush
+@endif
 
 @php
     $couple = array_filter([

@@ -44,7 +44,7 @@ class NextLeadFinder
 
         $due = FollowUp::query()
             ->with('lead')
-            ->where('user_id', $user->id)
+            ->forAgent($user->id)
             ->where('status', 'pending')
             ->where('scheduled_at', '<=', now()->addMinutes(self::DUE_GRACE_MINUTES))
             ->when($afterLeadId, fn ($q) => $q->where('lead_id', '!=', $afterLeadId))

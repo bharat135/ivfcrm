@@ -11,7 +11,7 @@
     @if($patient->mobile)
         {{-- The inbox searches threads by number, so this lands on this person's
              conversation rather than opening a new one. --}}
-        <a href="{{ route('chat.index', ['q' => $patient->mobile]) }}" class="btn btn-xs btn-outline-secondary" title="Messages">
+        <a href="{{ route('chat.index', ['q' => \App\Support\PhoneNumber::canView() ? $patient->mobile : $patient->patient_code]) }}" class="btn btn-xs btn-outline-secondary" title="Messages">
             <i class="bi bi-whatsapp"></i>
         </a>
     @endif

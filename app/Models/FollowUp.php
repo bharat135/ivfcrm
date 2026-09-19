@@ -10,7 +10,22 @@ class FollowUp extends Model
     protected $fillable = [
         'lead_id', 'user_id', 'disposition_id', 'type', 'scheduled_at',
         'status', 'completed_at', 'remark', 'reminder_sent',
+        'delegated_to', 'delegated_reason',
     ];
+
+    /** The agent covering this follow-up while the owner is on leave. */
+    public function delegate(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'delegated_to');
+    }
+
+    /** Follow-ups an agent must work: their own (unless covered) plus the ones they cover. */
+    public function scopeForAgent($query, int $userId)
+    {
+        return $query->where(fn ($q) => $q
+            ->where(fn ($own) => $own->where('user_id', $userId)->whereNull('delegated_to'))
+            ->orWhere('delegated_to', $userId));
+    }
 
     protected $casts = [
         'scheduled_at'  => 'datetime',

@@ -28,11 +28,11 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold">Mobile <span class="text-danger">*</span></label>
-                    <input type="text" name="mobile" class="form-control" value="{{ old('mobile', $lead->mobile) }}" required>
+                    <input type="text" name="mobile" class="form-control" value="{{ old('mobile', \App\Support\PhoneNumber::display($lead->mobile)) }}" {{ \App\Support\PhoneNumber::canView() ? '' : 'readonly title="Number hidden"' }} required>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold">Alt Mobile</label>
-                    <input type="text" name="alt_mobile" class="form-control" value="{{ old('alt_mobile', $lead->alt_mobile) }}">
+                    <input type="text" name="alt_mobile" class="form-control" value="{{ old('alt_mobile', \App\Support\PhoneNumber::display($lead->alt_mobile)) }}" {{ \App\Support\PhoneNumber::canView() ? '' : 'readonly title="Number hidden"' }}>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold">Email</label>

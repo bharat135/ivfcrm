@@ -186,4 +186,28 @@ class User extends Authenticatable
     {
         return $this->last_seen_at !== null && $this->last_seen_at->gte(now()->subMinutes($minutes));
     }
+
+    public function leaves(): HasMany
+    {
+        return $this->hasMany(AgentLeave::class);
+    }
+
+    /** On personal leave, or it is a clinic-wide holiday. */
+    public function isOnLeave(\Illuminate\Support\Carbon|string|null $date = null): bool
+    {
+        return AgentLeave::affecting($this->id)->onDate($date ?: today())->exists();
+    }
+
+    /** Not on leave (and no clinic holiday) on the given day. */
+    public function scopeNotOnLeave($query, \Illuminate\Support\Carbon|string|null $date = null)
+    {
+        $day = \Illuminate\Support\Carbon::parse($date ?: today())->toDateString();
+
+        return $query->whereNotExists(function ($q) use ($day) {
+            $q->selectRaw('1')->from('agent_leaves')
+                ->whereColumn('agent_leaves.user_id', 'users.id')
+                ->whereDate('agent_leaves.starts_on', '<=', $day)
+                ->whereDate('agent_leaves.ends_on', '>=', $day);
+        });
+    }
 }

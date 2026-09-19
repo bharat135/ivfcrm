@@ -41,7 +41,7 @@ class PatientProfile
         // Everything that happened to this person is logged against the enquiry
         // facet, because that is the record a telecaller works against.
         $timeline = $lead
-            ? $lead->activities()->with('user:id,name')->limit(50)->get()
+            ? $lead->activities()->with('user:id,name')->limit(100)->get()
             : collect();
 
         $calls = $lead
@@ -102,7 +102,7 @@ class PatientProfile
     private function taskBoard(?Lead $lead): array
     {
         $followUps = $lead
-            ? $lead->followUps()->with(['user:id,name', 'disposition:id,name,color'])->get()
+            ? $lead->followUps()->with(['user:id,name', 'delegate:id,name', 'disposition:id,name,color'])->get()
             : collect();
 
         $pending = $followUps->where('status', 'pending');

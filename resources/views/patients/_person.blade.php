@@ -11,7 +11,7 @@
             <span>{{ $p->patient_code }}</span>
             @if($p->mobile)
                 <span class="text-body-tertiary">·</span>
-                <span>{{ $p->mobile }}</span>
+                <span>{{ \App\Support\PhoneNumber::display($p->mobile) }}</span>
             @endif
         </div>
     </div>

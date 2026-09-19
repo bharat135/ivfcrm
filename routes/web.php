@@ -52,6 +52,7 @@ Route::middleware(['auth', 'single.device'])->group(function () {
         Route::post('/{lead}/disposition', [LeadController::class, 'updateDisposition'])->name('disposition');
         Route::post('/{lead}/reassign', [LeadController::class, 'reassign'])->name('reassign');
         Route::post('/{lead}/stage', [LeadController::class, 'stageUpdate'])->name('stage');
+        Route::patch('/{lead}/center', [LeadController::class, 'updateCenter'])->name('center');
         Route::post('/bulk-assign', [LeadController::class, 'bulkAssign'])->name('bulk_assign');
     });
 
@@ -170,6 +171,15 @@ Route::middleware(['auth', 'single.device'])->group(function () {
             Route::get('/{leadSource}/edit', [LeadSourceController::class, 'edit'])->middleware('can:lead_sources.edit')->name('edit');
             Route::put('/{leadSource}', [LeadSourceController::class, 'update'])->middleware('can:lead_sources.edit')->name('update');
             Route::delete('/{leadSource}', [LeadSourceController::class, 'destroy'])->middleware('can:lead_sources.delete')->name('destroy');
+        });
+
+        // Holidays & leaves (follow-up cover while an agent is away)
+        Route::prefix('leaves')->name('leaves.')->middleware('can:leaves.view')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Settings\LeaveController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\Settings\LeaveController::class, 'store'])->middleware('can:leaves.create')->name('store');
+            Route::get('/{leave}/edit', [\App\Http\Controllers\Settings\LeaveController::class, 'edit'])->middleware('can:leaves.edit')->name('edit');
+            Route::put('/{leave}', [\App\Http\Controllers\Settings\LeaveController::class, 'update'])->middleware('can:leaves.edit')->name('update');
+            Route::delete('/{leave}', [\App\Http\Controllers\Settings\LeaveController::class, 'destroy'])->middleware('can:leaves.delete')->name('destroy');
         });
 
         // Lead assignment rules + fallback

@@ -593,7 +593,7 @@ class CallController extends Controller
             'status'        => $call->status,
             'badge'         => $call->statusBadge(),
             'contact'       => $call->contactName(),
-            'number'        => $call->contactNumber(),
+            'number'        => \App\Support\PhoneNumber::display($call->contactNumber()),
             'lead_id'       => $call->lead_id,
             'lead_url'      => $call->lead_id ? route('leads.show', $call->lead_id) : null,
             'agent'         => $call->user?->name,

@@ -40,6 +40,7 @@ class LeadController extends Controller
             $this->applyListFilters($query, $request);
 
             return DataTables::of($query)
+                ->editColumn('mobile', fn (Lead $lead) => \App\Support\PhoneNumber::display($lead->mobile))
                 ->addColumn('origin', fn (Lead $lead) => view('leads._origin', compact('lead'))->render())
                 ->addColumn('action', function (Lead $lead) {
                     return view('leads._actions', compact('lead'))->render();
@@ -145,6 +146,63 @@ class LeadController extends Controller
     }
 
     /**
+     * Change the centre straight from the profile, no edit screen. The
+     * patient facet follows, and the change is on the log with who did it.
+     */
+    public function updateCenter(Request $request, Lead $lead)
+    {
+        $this->authorize('update', $lead);
+
+        $data = $request->validate(['center_id' => ['required', 'exists:centers,id']]);
+
+        $from = $lead->center?->name ?? 'none';
+        $lead->update(['center_id' => (int) $data['center_id']]);
+        $lead->load('center');
+
+        if ($lead->patient) {
+            $lead->patient->forceFill(['center_id' => $lead->center_id])->saveQuietly();
+        }
+
+        $this->service->logActivity($lead, 'system', 'Centre changed to ' . $lead->center->name, "From {$from} to {$lead->center->name}.");
+
+        return response()->json(['success' => true, 'message' => 'Centre changed to ' . $lead->center->name . '.']);
+    }
+
+    /** "Centre: Ulwe → Thane; Name: A → B" for the log. */
+    private function describeChanges(Lead $before, Lead $after): string
+    {
+        $labels = [
+            'name' => 'Name', 'email' => 'Email', 'gender' => 'Gender', 'age' => 'Age', 'pincode' => 'Pincode',
+            'center_id' => 'Centre', 'lead_source_id' => 'Source', 'assigned_to' => 'Owner', 'campaign_id' => 'Campaign',
+            'remark' => 'Remark', 'lead_date' => 'Lead date', 'mobile' => 'Mobile', 'alt_mobile' => 'Alt. mobile',
+            'wife_dob' => "Wife's DOB", 'husband_dob' => "Husband's DOB", 'marriage_date' => 'Marriage date', 'trying_since' => 'Trying since',
+        ];
+
+        $parts = [];
+        foreach ($after->getChanges() as $key => $new) {
+            if (! isset($labels[$key])) {
+                continue;
+            }
+
+            $old = $before->getAttribute($key);
+            $fmt = function ($v) use ($key) {
+                if ($v === null || $v === '') return '—';
+                if (in_array($key, ['mobile', 'alt_mobile'], true)) return \App\Support\PhoneNumber::display((string) $v);
+                if ($key === 'center_id') return \App\Models\Center::whereKey($v)->value('name') ?? $v;
+                if ($key === 'lead_source_id') return \App\Models\LeadSource::whereKey($v)->value('name') ?? $v;
+                if ($key === 'assigned_to') return \App\Models\User::whereKey($v)->value('name') ?? $v;
+                if ($key === 'campaign_id') return \App\Models\Campaign::whereKey($v)->value('name') ?? $v;
+                if ($v instanceof \DateTimeInterface) return $v->format('d-m-Y');
+                return (string) $v;
+            };
+
+            $parts[] = $labels[$key] . ': ' . $fmt($old) . ' → ' . $fmt($new);
+        }
+
+        return implode('; ', $parts);
+    }
+
+    /**
      * The form asks for ages and years; the lead stores dates so they keep
      * counting. The legacy single `age` follows the wife's (or husband's) age
      * so older screens and imports keep working.
@@ -202,9 +260,24 @@ class LeadController extends Controller
     public function update(StoreLeadRequest $request, Lead $lead)
     {
         $this->authorize('update', $lead);
-        $lead->update($this->withCoupleDates($request->validated(), $lead));
+
+        $data = $this->withCoupleDates($request->validated(), $lead);
+
+        // Telecallers only ever see a masked number, so they cannot change it.
+        if (! \App\Support\PhoneNumber::canView()) {
+            unset($data['mobile'], $data['alt_mobile']);
+        }
+
+        $before = $lead->replicate();
+        $lead->update($data);
         $this->linker->syncCoupleDates($lead);
-        $this->service->logActivity($lead, 'system', 'Lead Updated', 'Lead details updated by ' . Auth::user()->name);
+
+        if ($lead->wasChanged('center_id') && $lead->patient) {
+            $lead->patient->forceFill(['center_id' => $lead->center_id])->saveQuietly();
+        }
+
+        $this->service->logActivity($lead, 'system', 'Details updated',
+            $this->describeChanges($before, $lead) ?: 'No field values changed.');
 
         return redirect()->route('leads.show', $lead)->with('success', 'Lead updated.');
     }

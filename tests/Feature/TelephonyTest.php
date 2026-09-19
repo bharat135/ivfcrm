@@ -564,8 +564,11 @@ class TelephonyTest extends TestCase
             $this->actingAs($this->agent)->getJson(route('calls.recent'))->json('data')
         )->pluck('number');
 
-        $this->assertTrue($numbers->contains('9811111111'));
-        $this->assertFalse($numbers->contains('9822222222'), 'An agent must not see another agent\'s calls.');
+        // Telecallers see masked numbers; either form proves the call is theirs.
+        $mine   = ['9811111111', \App\Support\PhoneNumber::mask('9811111111')];
+        $theirs = ['9822222222', \App\Support\PhoneNumber::mask('9822222222')];
+        $this->assertTrue($numbers->contains(fn ($n) => in_array($n, $mine, true)));
+        $this->assertFalse($numbers->contains(fn ($n) => in_array($n, $theirs, true)), 'An agent must not see another agent\'s calls.');
     }
 
     // -----------------------------------------------------------------

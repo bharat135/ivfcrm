@@ -12,7 +12,7 @@ class StoreLeadRequest extends FormRequest
     {
         return [
             'name'           => ['nullable', 'string', 'max:191'],
-            'mobile'         => ['required', 'string', 'max:20', new \App\Rules\IndianMobile()],
+            'mobile'         => [$this->isMethod('PUT') || $this->isMethod('PATCH') ? 'sometimes' : 'required', 'string', 'max:20', new \App\Rules\IndianMobile()],
             'alt_mobile'     => ['nullable', 'string', 'max:20', new \App\Rules\IndianMobile()],
             'email'          => ['nullable', 'email', 'max:191'],
             'gender'         => ['nullable', 'in:male,female,other'],

@@ -131,7 +131,7 @@
                             <span class="fw-semibold">{{ $lead->name ?: 'Unnamed' }}</span>
                             <small class="text-muted">{{ $lead->created_at->diffForHumans() }}</small>
                         </div>
-                        <small class="text-muted">{{ $lead->mobile }} · {{ $lead->stage?->name ?: $lead->status }}</small>
+                        <small class="text-muted">{{ \App\Support\PhoneNumber::display($lead->mobile) }} · {{ $lead->stage?->name ?: $lead->status }}</small>
                     </a>
                 @empty
                     <div class="list-group-item text-muted small text-center py-4">No leads attributed yet.</div>

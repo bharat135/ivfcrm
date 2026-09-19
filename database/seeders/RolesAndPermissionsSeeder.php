@@ -17,7 +17,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'leads', 'patients', 'appointments', 'followups', 'call_logs',
             'campaigns', 'lead_sources', 'doctors', 'centers', 'users',
             'roles', 'dispositions', 'pipeline_stages', 'assignment_rules',
-            'lead_imports', 'reports', 'settings', 'counselling', 'treatments',
+            'lead_imports', 'reports', 'settings', 'counselling', 'treatments', 'leaves',
             // WhatsApp + Meta marketing suite
             'conversations', 'whatsapp_templates', 'whatsapp_flows', 'broadcasts', 'landing_pages', 'integrations',
             // Telephony (Asterisk / MicroSIP / WhatsApp calling)
@@ -35,7 +35,8 @@ class RolesAndPermissionsSeeder extends Seeder
         }
 
         // Extra cross-cutting permissions
-        foreach (['reassign_leads', 'view_all_leads', 'view_own_leads', 'bulk_actions', 'access_api'] as $perm) {
+        // view_mobile_numbers: every role except Telecaller sees full numbers.
+        foreach (['reassign_leads', 'view_all_leads', 'view_own_leads', 'bulk_actions', 'access_api', 'view_mobile_numbers'] as $perm) {
             Permission::firstOrCreate(['name' => $perm]);
         }
 
@@ -51,6 +52,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'view_all_leads', 'reassign_leads', 'bulk_actions', 'access_api',
             ],
             'Management' => [
+                'leaves.*', 'view_mobile_numbers',
                 'leads.*', 'patients.*', 'appointments.*', 'followups.*', 'call_logs.*',
                 'campaigns.*', 'lead_sources.*', 'doctors.*', 'centers.*', 'users.*',
                 'roles.*', 'dispositions.*', 'pipeline_stages.*', 'assignment_rules.*',
@@ -60,6 +62,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'view_all_leads', 'reassign_leads', 'bulk_actions',
             ],
             'Marketing Head' => [
+                'leaves.view', 'view_mobile_numbers',
                 'leads.view', 'leads.create', 'leads.edit', 'leads.export', 'assignment_rules.*',
                 'campaigns.*', 'lead_sources.*', 'reports.view', 'reports.export',
                 'conversations.*', 'whatsapp_templates.*', 'whatsapp_flows.*', 'broadcasts.*', 'landing_pages.*',
@@ -78,6 +81,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'view_all_leads',
             ],
             'Center Manager' => [
+                'leaves.*', 'view_mobile_numbers',
                 'leads.*', 'patients.*', 'appointments.*', 'followups.*', 'call_logs.*',
                 'doctors.view', 'reports.view', 'reports.export', 'counselling.*',
                 'conversations.*', 'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
@@ -94,12 +98,14 @@ class RolesAndPermissionsSeeder extends Seeder
                 'leads.view', 'followups.view',
             ],
             'Counsellor' => [
+                'leaves.view', 'view_mobile_numbers',
                 'leads.view', 'leads.create', 'leads.edit', 'patients.view', 'patients.edit',
                 'appointments.*', 'counselling.*', 'followups.*',
                 'conversations.view', 'conversations.create', 'conversations.edit',
                 'whatsapp_templates.view',
             ],
             'Telecaller' => [
+                'leaves.view', // no view_mobile_numbers: numbers are masked for telecallers
                 'leads.view', 'leads.create', 'leads.edit', 'followups.*', 'call_logs.*',
                 'appointments.view', 'appointments.create',
                 'conversations.view', 'conversations.create', 'conversations.edit',
@@ -111,6 +117,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'telephony.view',
             ],
             'Receptionist' => [
+                'leaves.view', 'view_mobile_numbers',
                 'appointments.*', 'patients.view', 'patients.create',
                 'leads.view', 'leads.create',
                 'conversations.view', 'conversations.create',

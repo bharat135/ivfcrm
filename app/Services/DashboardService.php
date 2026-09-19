@@ -95,6 +95,7 @@ class DashboardService
             ->when($centerId, fn($q) => $q->where('center_id', $centerId))
             ->select('id', 'name', 'mobile', 'stage_id', 'assigned_to', 'score_band')
             ->get()
+            ->each(fn ($l) => $l->setAttribute('mobile', \App\Support\PhoneNumber::display($l->mobile)))
             ->groupBy('stage_id');
 
         return $stages->map(fn($stage) => [

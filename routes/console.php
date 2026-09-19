@@ -74,6 +74,8 @@ Schedule::call(function () {
 // called within the idle window moves to another online agent.
 Schedule::job(new \App\Jobs\AssignPendingLeadsJob)->everyMinute()->name('assign-pending-leads')->withoutOverlapping();
 Schedule::job(new \App\Jobs\ReassignIdleLeadsJob)->everyFiveMinutes()->name('reassign-idle-leads')->withoutOverlapping();
+// Leave cover: follow-ups due while their owner is away go to a present agent.
+Schedule::job(new \App\Jobs\DelegateLeaveFollowUpsJob)->everyFifteenMinutes()->name('delegate-leave-followups')->withoutOverlapping();
 
 // Keep the Tata Smartflo access token fresh so panel calls never hit an expired
 // token. Runs often; the command itself only re-mints when near expiry.

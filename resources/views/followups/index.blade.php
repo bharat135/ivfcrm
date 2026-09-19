@@ -71,7 +71,8 @@ const table = $('#fuTable').DataTable({
     columns: [
         { data: 'lead.name', render: (d, t, row) =>
             `<a href="/leads/${row.lead_id}" class="text-decoration-none">${d || row.lead?.mobile || '—'}</a>` },
-        { data: 'lead.mobile', defaultContent: '—' },
+        { data: 'lead_mobile', orderable: false, searchable: false, defaultContent: '—',
+          render: (d, t, row) => (d || '—') + (row.cover ? ' ' + row.cover : '') },
         { data: 'type', render: d => `<span class="badge bg-secondary">${d}</span>` },
         { data: 'scheduled_at', render: d => {
             const past = d && new Date(d) < new Date();

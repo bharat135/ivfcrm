@@ -110,7 +110,7 @@
                     // Everyone attached to this follow-up: the person it is
                     // assigned to, and the owner of the enquiry if that is
                     // someone else. Rendered as an overlapping stack.
-                    $people = collect([$task->user, $lead?->assignedTo])
+                    $people = collect([$task->delegate ?? null, $task->user, $lead?->assignedTo])
                         ->filter()->unique('id');
                 @endphp
                 <span class="avatar-stack">

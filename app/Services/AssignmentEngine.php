@@ -153,6 +153,18 @@ class AssignmentEngine
                 'assigned_at' => now(),
             ]);
         });
+
+        $owner = User::find($lead->assigned_to);
+        $by    = $assignedBy ? User::find($assignedBy) : null;
+
+        LeadActivity::create([
+            'lead_id'     => $lead->id,
+            'user_id'     => $assignedBy,
+            'type'        => 'assignment',
+            'title'       => 'Assigned to ' . ($owner?->name ?? '#' . $lead->assigned_to),
+            'description' => $by ? "Chosen by {$by->name} when the lead was entered." : 'Set when the lead was created.',
+            'properties'  => ['to' => $lead->assigned_to, 'method' => 'manual'],
+        ]);
     }
 
     public function onlineAgentsExist(): bool
@@ -260,20 +272,49 @@ class AssignmentEngine
             ->active()
             ->available()
             ->online($this->onlineMinutes())
+            ->notOnLeave()
             ->withCount(['assignedLeads as today_count' => fn ($q) => $q->whereDate('assigned_at', today())])
             ->orderBy('today_count')
             ->orderBy('id');
     }
 
+    /**
+     * Who covers a follow-up while its owner is away: a present agent in the
+     * owner's centre if possible, otherwise any present agent, least loaded.
+     */
+    public function pickCover(?User $owner, \Illuminate\Support\Carbon|string $date): ?User
+    {
+        $base = fn () => User::query()
+            ->active()
+            ->available()
+            ->notOnLeave($date)
+            ->whereHas('roles', fn ($q) => $q->whereIn('name', ['Telecaller', 'Counsellor']))
+            ->when($owner, fn ($q) => $q->where('id', '!=', $owner->id))
+            ->withCount(['assignedLeads as today_count' => fn ($q) => $q->whereDate('assigned_at', today())])
+            ->orderBy('today_count')
+            ->orderBy('id');
+
+        if ($owner?->center_id) {
+            $sameCentre = $base()->where('center_id', $owner->center_id)->first();
+            if ($sameCentre) {
+                return $sameCentre;
+            }
+        }
+
+        return $base()->first();
+    }
+
     private function doAssign(Lead $lead, User $user, string $method, ?AssignmentRule $rule = null): void
     {
+        $previous = $lead->assigned_to ? User::find($lead->assigned_to) : null;
+
         DB::transaction(function () use ($lead, $user, $method) {
             $lead->update(['assigned_to' => $user->id, 'assigned_at' => now()]);
 
             LeadAssignment::create([
                 'lead_id'     => $lead->id,
                 'assigned_to' => $user->id,
-                'assigned_by' => null,
+                'assigned_by' => \Illuminate\Support\Facades\Auth::id(),
                 'method'      => $method,
                 'assigned_at' => now(),
             ]);
@@ -282,5 +323,20 @@ class AssignmentEngine
         if ($rule) {
             AssignmentRule::whereKey($rule->id)->increment('leads_count');
         }
+
+        $how = match ($method) {
+            'idle_reassign' => 'not called in time',
+            'skill'         => 'language match' . ($rule ? " (rule \"{$rule->name}\")" : ''),
+            default         => $rule ? "rule \"{$rule->name}\"" : 'round-robin fallback',
+        };
+
+        LeadActivity::create([
+            'lead_id'     => $lead->id,
+            'user_id'     => \Illuminate\Support\Facades\Auth::id(),
+            'type'        => 'assignment',
+            'title'       => ($previous ? 'Owner changed to ' : 'Assigned to ') . $user->name,
+            'description' => ($previous ? "From {$previous->name}. " : '') . 'Automatic: ' . $how . '.',
+            'properties'  => ['from' => $previous?->id, 'to' => $user->id, 'method' => $method, 'rule_id' => $rule?->id],
+        ]);
     }
 }

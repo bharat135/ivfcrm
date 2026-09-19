@@ -13,6 +13,6 @@
         @else
             <span class="d-block text-truncate">{{ $call->contactName() }}</span>
         @endif
-        <small class="text-muted">{{ $call->contactNumber() ?: '—' }}</small>
+        <small class="text-muted">{{ \App\Support\PhoneNumber::display($call->contactNumber()) ?: '—' }}</small>
     </div>
 </div>

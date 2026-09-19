@@ -231,7 +231,7 @@
         </a>
         @endcan
 
-        @canany(['users.view','roles.view','dispositions.view','centers.view','lead_sources.view','assignment_rules.view','integrations.view','telephony.view','tata.view'])
+        @canany(['users.view','roles.view','dispositions.view','centers.view','lead_sources.view','assignment_rules.view','leaves.view','integrations.view','telephony.view','tata.view'])
         <div class="nav-label">Settings</div>
         @can('integrations.view')
         <a href="{{ route('settings.integrations.index') }}" class="nav-link {{ request()->routeIs('settings.integrations.*') ? 'active' : '' }}">
@@ -282,6 +282,11 @@
         @can('assignment_rules.view')
         <a href="{{ route('settings.assignment_rules.index') }}" class="nav-link {{ request()->routeIs('settings.assignment_rules.*') ? 'active' : '' }}">
             <i class="bi bi-diagram-3"></i> <span>Lead Assignment</span>
+        </a>
+        @endcan
+        @can('leaves.view')
+        <a href="{{ route('settings.leaves.index') }}" class="nav-link {{ request()->routeIs('settings.leaves.*') ? 'active' : '' }}">
+            <i class="bi bi-calendar-x"></i> <span>Holidays &amp; Leaves</span>
         </a>
         @endcan
         @endcanany

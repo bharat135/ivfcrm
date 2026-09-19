@@ -91,7 +91,7 @@
                     <tr>
                         <td>{{ $lead->id }}</td>
                         <td><a href="{{ route('leads.show', $lead) }}" class="text-decoration-none">{{ $lead->name ?? '—' }}</a></td>
-                        <td>{{ $lead->mobile }}</td>
+                        <td>{{ \App\Support\PhoneNumber::display($lead->mobile) }}</td>
                         <td>{{ $lead->email ?? '—' }}</td>
                         <td>{{ $lead->source?->name ?? '—' }}</td>
                         <td>

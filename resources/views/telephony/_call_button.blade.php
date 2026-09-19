@@ -14,20 +14,27 @@
     $showWhatsApp   = $showWhatsApp ?? false;
 @endphp
 
+@php
+    // Telecallers never receive the raw number: the button carries only the
+    // lead / patient id and the server dials the number it holds.
+    $canSeeNumber = \App\Support\PhoneNumber::canView();
+    $dialNumber   = $canSeeNumber ? $number : '';
+    $shownNumber  = \App\Support\PhoneNumber::display($number);
+@endphp
 @can('call_logs.create')
     @if($number)
         <div class="btn-group btn-group-{{ $size }}">
             <button type="button" class="btn btn-success js-click-to-call"
-                    data-number="{{ $number }}"
+                    data-number="{{ $dialNumber }}"
                     @if($leadId) data-lead="{{ $leadId }}" @endif
                     @if($patientId) data-patient="{{ $patientId }}" @endif
-                    title="Call {{ $number }} from your softphone">
+                    title="Call {{ $shownNumber }} from your softphone">
                 <i class="bi bi-telephone-outbound me-1"></i>{{ $label }}
             </button>
 
             @if($showWhatsApp && config('telephony.whatsapp_calling.enabled'))
                 <button type="button" class="btn btn-outline-success js-whatsapp-call"
-                        data-number="{{ $number }}"
+                        data-number="{{ $dialNumber }}"
                         @if($leadId) data-lead="{{ $leadId }}" @endif
                         @if($conversationId) data-conversation="{{ $conversationId }}" @endif
                         title="Call over WhatsApp">
@@ -35,9 +42,11 @@
                 </button>
             @endif
 
+            @if($canSeeNumber)
             <a href="tel:{{ $number }}" class="btn btn-outline-secondary" title="Dial with your desktop softphone">
                 <i class="bi bi-box-arrow-up-right"></i>
             </a>
+            @endif
         </div>
     @endif
 @endcan

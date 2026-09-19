@@ -114,21 +114,24 @@
                     @include('partials.profile._disposition', ['lead' => $lead, 'dispositions' => $dispositions])
                 @endif
 
-                <h6 class="fw-semibold small text-muted mb-3">Activity</h6>
+                <h6 class="fw-semibold small text-muted mb-3">Log <span class="fw-normal">— every call, owner change, edit and follow-up, with who and when</span></h6>
+                @php
+                    $logIcons = ['call' => 'bi-telephone', 'assignment' => 'bi-person-check', 'status' => 'bi-flag', 'followup' => 'bi-calendar-check', 'whatsapp' => 'bi-whatsapp', 'system' => 'bi-gear'];
+                @endphp
                 @forelse($timeline as $entry)
-                    <div class="d-flex gap-3 pb-3 timeline-row">
-                        <div class="timeline-marker"><i class="bi bi-dot"></i></div>
+                    <div class="d-flex gap-3 pb-3 timeline-row" data-type="{{ $entry->type }}">
+                        <div class="timeline-marker"><i class="bi {{ $logIcons[$entry->type] ?? 'bi-dot' }}"></i></div>
                         <div class="flex-grow-1 min-w-0">
                             <div class="d-flex justify-content-between gap-2">
                                 <strong class="small">{{ $entry->title }}</strong>
-                                <span class="text-muted small text-nowrap">{{ $entry->created_at->diffForHumans() }}</span>
+                                <span class="text-muted small text-nowrap" title="{{ $entry->created_at->diffForHumans() }}">{{ $entry->created_at->format('d-m-Y h:i A') }}</span>
                             </div>
                             @if($entry->description)
                                 <div class="text-muted small">{{ $entry->description }}</div>
                             @endif
-                            @if($entry->user)
-                                <div class="text-body-tertiary small">by {{ $entry->user->name }}</div>
-                            @endif
+                            <div class="text-body-tertiary small">
+                                {{ $entry->user ? 'by ' . $entry->user->name : 'by system' }} · {{ $entry->created_at->diffForHumans() }}
+                            </div>
                         </div>
                     </div>
                 @empty
@@ -339,7 +342,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="alert alert-light border small mb-3">For <strong>{{ $patient->name ?? $lead?->name }}</strong>{{ ($lead?->mobile ?? $patient->mobile) ? ' · ' . ($lead?->mobile ?? $patient->mobile) : '' }}</div>
+                <div class="alert alert-light border small mb-3">For <strong>{{ $patient->name ?? $lead?->name }}</strong>{{ ($lead?->mobile ?? $patient->mobile) ? ' · ' . \App\Support\PhoneNumber::display($lead?->mobile ?? $patient->mobile) : '' }}</div>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Doctor <span class="text-danger">*</span></label>

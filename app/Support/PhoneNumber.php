@@ -57,6 +57,46 @@ final class PhoneNumber
         return self::isValidIndian($raw) && (bool) preg_match('/^[6-9]\d{9}$/', self::indian($raw));
     }
 
+    /** "9876543210" -> "98XXXXXX10": enough to recognise, not enough to dial. */
+    public static function mask(?string $raw): ?string
+    {
+        if ($raw === null || $raw === '') {
+            return $raw;
+        }
+
+        $n = preg_replace('/\D+/', '', $raw) ?? '';
+
+        if (strlen($n) < 6) {
+            return str_repeat('X', strlen($n));
+        }
+
+        return substr($n, 0, 2) . str_repeat('X', strlen($n) - 4) . substr($n, -2);
+    }
+
+    /**
+     * What the current user may see: the full number for staff with the
+     * view_mobile_numbers permission (and outside a request), masked for
+     * telecallers. Every screen renders numbers through here.
+     */
+    public static function display(?string $raw): ?string
+    {
+        $user = auth()->user();
+
+        if (! $user || $user->can('view_mobile_numbers')) {
+            return $raw;
+        }
+
+        return self::mask($raw);
+    }
+
+    /** True when the current user may see (and dial by typing) full numbers. */
+    public static function canView(): bool
+    {
+        $user = auth()->user();
+
+        return ! $user || $user->can('view_mobile_numbers');
+    }
+
     /** Hash used by lead/patient dedup, from the normalised ten digits. */
     public static function dedupHash(?string $raw): ?string
     {
