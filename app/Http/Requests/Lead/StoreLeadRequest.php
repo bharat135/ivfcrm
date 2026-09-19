@@ -12,8 +12,8 @@ class StoreLeadRequest extends FormRequest
     {
         return [
             'name'           => ['nullable', 'string', 'max:191'],
-            'mobile'         => ['required', 'string', 'max:20'],
-            'alt_mobile'     => ['nullable', 'string', 'max:20'],
+            'mobile'         => ['required', 'string', 'max:20', new \App\Rules\IndianMobile()],
+            'alt_mobile'     => ['nullable', 'string', 'max:20', new \App\Rules\IndianMobile()],
             'email'          => ['nullable', 'email', 'max:191'],
             'gender'         => ['nullable', 'in:male,female,other'],
             'age'            => ['nullable', 'integer', 'min:1', 'max:120'],

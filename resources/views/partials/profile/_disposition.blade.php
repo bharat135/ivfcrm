@@ -16,6 +16,11 @@
         @endif
     </div>
     <div class="card-body">
+        <div class="d-flex justify-content-end mb-2">
+            <a href="{{ route('leads.next', ['after' => $lead->id]) }}" class="btn btn-outline-secondary btn-sm" title="Open the next uncalled lead or due follow-up">
+                Next lead <i class="bi bi-arrow-right-short"></i>
+            </a>
+        </div>
         <form id="dispositionForm">
             @csrf
             <div class="row g-2">
@@ -88,7 +93,10 @@ $('#dispositionForm').on('submit', function (e) {
     const btn = $(this).find('[type=submit]').prop('disabled', true);
 
     $.post('{{ route("leads.disposition", $lead) }}', $(this).serialize())
-        .done(() => { toastr.success('Disposition saved.'); window.location.reload(); })
+        .done(res => {
+            toastr.success('Disposition saved. Opening the next lead…');
+            window.location.href = res?.next_url || '{{ route('leads.next', ['after' => $lead->id]) }}';
+        })
         .fail(xhr => {
             const errors = xhr.responseJSON?.errors || {};
             toastr.error(Object.values(errors).flat().join('<br>') || 'Could not save this disposition.');

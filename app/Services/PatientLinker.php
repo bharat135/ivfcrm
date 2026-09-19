@@ -266,7 +266,7 @@ class PatientLinker
             return null;
         }
 
-        $digits = preg_replace('/\D/', '', $mobile);
+        $digits = \App\Support\PhoneNumber::indian($mobile);
 
         return $digits === '' ? null : sha1($digits);
     }

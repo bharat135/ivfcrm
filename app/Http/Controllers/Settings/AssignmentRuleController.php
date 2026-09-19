@@ -71,6 +71,12 @@ class AssignmentRuleController extends Controller
             'methods'   => AssignmentEngine::METHODS,
             'fallbacks' => AssignmentEngine::FALLBACKS,
             'fallback'  => $this->engine->fallbackStrategy(),
+            'presence'  => [
+                'online_minutes'     => $this->engine->onlineMinutes(),
+                'idle_minutes'       => $this->engine->idleMinutes(),
+                'idle_max_age_hours' => $this->engine->idleMaxAgeHours(),
+                'online_now'         => User::query()->active()->available()->online($this->engine->onlineMinutes())->count(),
+            ],
         ]);
     }
 
@@ -122,10 +128,19 @@ class AssignmentRuleController extends Controller
     public function updateFallback(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'fallback' => ['required', Rule::in(array_keys(AssignmentEngine::FALLBACKS))],
+            'fallback'           => ['required', Rule::in(array_keys(AssignmentEngine::FALLBACKS))],
+            'online_minutes'     => ['nullable', 'integer', 'min:1', 'max:120'],
+            'idle_minutes'       => ['nullable', 'integer', 'min:5', 'max:1440'],
+            'idle_max_age_hours' => ['nullable', 'integer', 'min:1', 'max:720'],
         ]);
 
         $this->settings->set('assignment', 'fallback', $data['fallback']);
+
+        foreach (['online_minutes', 'idle_minutes', 'idle_max_age_hours'] as $key) {
+            if (isset($data[$key])) {
+                $this->settings->set('assignment', $key, (int) $data[$key]);
+            }
+        }
 
         return response()->json(['success' => true, 'message' => 'Fallback strategy saved.']);
     }

@@ -78,6 +78,21 @@ class LeadController extends Controller
             ->when($request->filled('assigned_to'), fn ($q) => $q->where('assigned_to', $request->assigned_to));
     }
 
+    /**
+     * Open whatever the agent should work on next (see NextLeadFinder), or
+     * fall back to the worklist when nothing is waiting.
+     */
+    public function next(Request $request, \App\Services\NextLeadFinder $finder)
+    {
+        $next = $finder->for($request->user(), $request->integer('after') ?: null);
+
+        if (! $next) {
+            return redirect()->route('leads.index')->with('success', 'Nothing waiting: no uncalled leads and no follow-ups due right now.');
+        }
+
+        return redirect()->route('leads.show', $next['lead'])->with('success', 'Next: ' . $next['reason']);
+    }
+
     public function create()
     {
         $sources     = LeadSource::active()->get();
@@ -242,10 +257,14 @@ class LeadController extends Controller
         // expectsJson() covers both jQuery (X-Requested-With) and API clients
         // that only send an Accept header.
         if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => 'Disposition updated.']);
+            return response()->json([
+                'success'  => true,
+                'message'  => 'Disposition updated.',
+                'next_url' => route('leads.next', ['after' => $lead->id]),
+            ]);
         }
 
-        return back()->with('success', 'Disposition updated.');
+        return redirect()->route('leads.next', ['after' => $lead->id])->with('success', 'Disposition updated.');
     }
 
     public function reassign(Request $request, Lead $lead)

@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Support\CoupleDates;
 use App\Support\PatientJourney;
+use App\Support\PhoneNumber;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -57,7 +59,7 @@ class Patient extends Model
             // The same normalisation leads use, so one person cannot end up
             // with a lead row and an unrelated patient row for one number.
             if (empty($patient->dedup_hash) && $patient->mobile) {
-                $patient->dedup_hash = sha1(preg_replace('/\D/', '', $patient->mobile));
+                $patient->dedup_hash = PhoneNumber::dedupHash($patient->mobile);
             }
 
             $patient->first_enquiry_at = $patient->first_enquiry_at ?: now();
@@ -124,6 +126,17 @@ class Patient extends Model
             'first_enquiry_at' => 'datetime',
             'meta' => 'array',
         ];
+    }
+
+    /** Stored as exactly ten digits — no +91, no leading 0 — whatever was typed. */
+    protected function mobile(): Attribute
+    {
+        return Attribute::make(set: fn ($value) => PhoneNumber::indian($value));
+    }
+
+    protected function altMobile(): Attribute
+    {
+        return Attribute::make(set: fn ($value) => PhoneNumber::indian($value));
     }
 
     public function lead(): BelongsTo

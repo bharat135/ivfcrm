@@ -359,9 +359,11 @@ class CallController extends Controller
         $call = $this->calls->disposition($call, $data);
 
         return response()->json([
-            'success' => true,
-            'message' => 'Call outcome saved.',
-            'call'    => $this->payload($call),
+            'success'  => true,
+            'message'  => 'Call outcome saved.',
+            'call'     => $this->payload($call),
+            // The profile page moves straight on to the next lead.
+            'next_url' => route('leads.next', ['after' => $call->lead_id]),
         ]);
     }
 

@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Models\AssignmentRule;
 use App\Models\Lead;
+use App\Models\LeadActivity;
 use App\Models\LeadAssignment;
 use App\Models\User;
 use App\Support\SettingsRepository;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -16,6 +18,12 @@ use Illuminate\Support\Facades\DB;
  * Rules are evaluated in priority order (Settings → Lead Assignment); the
  * first rule whose conditions all match picks a user from its pool. When no
  * rule matches, the configurable fallback applies.
+ *
+ * Only agents who are ONLINE (seen in the last few minutes) receive leads.
+ * If nobody is online the lead stays unassigned and AssignPendingLeadsJob
+ * hands it out the moment someone appears. An owner who does not call an
+ * enquiry within the idle window loses it to another online agent
+ * (ReassignIdleLeadsJob).
  */
 class AssignmentEngine
 {
@@ -23,8 +31,8 @@ class AssignmentEngine
 
     /** Fallback when no rule matches. */
     public const FALLBACKS = [
-        'center_round_robin' => 'Round-robin among available telecallers of the lead\'s center',
-        'any_round_robin'    => 'Round-robin among all available telecallers',
+        'center_round_robin' => 'Round-robin among online telecallers of the lead\'s center',
+        'any_round_robin'    => 'Round-robin among all online telecallers',
         'none'               => 'Leave unassigned (a manager assigns manually)',
     ];
 
@@ -35,23 +43,91 @@ class AssignmentEngine
         'skill'       => 'Language match, then round-robin',
     ];
 
+    public const DEFAULT_ONLINE_MINUTES = 5;
+    public const DEFAULT_IDLE_MINUTES = 30;
+    public const DEFAULT_IDLE_MAX_AGE_HOURS = 72;
+
     public function __construct(private SettingsRepository $settings) {}
 
-    public function assign(Lead $lead): ?User
+    // -----------------------------------------------------------------
+    // Settings
+    // -----------------------------------------------------------------
+
+    public function fallbackStrategy(): string
+    {
+        $value = $this->settings->get('assignment', 'fallback', self::DEFAULT_FALLBACK);
+
+        return array_key_exists($value, self::FALLBACKS) ? $value : self::DEFAULT_FALLBACK;
+    }
+
+    /** An agent counts as online when seen within this many minutes. */
+    public function onlineMinutes(): int
+    {
+        return max(1, (int) $this->settings->get('assignment', 'online_minutes', self::DEFAULT_ONLINE_MINUTES));
+    }
+
+    /** Minutes an owner gets to call a new lead before it is handed on. */
+    public function idleMinutes(): int
+    {
+        return max(5, (int) $this->settings->get('assignment', 'idle_minutes', self::DEFAULT_IDLE_MINUTES));
+    }
+
+    /** Only enquiries received within this many hours are re-routed when idle. */
+    public function idleMaxAgeHours(): int
+    {
+        return max(1, (int) $this->settings->get('assignment', 'idle_max_age_hours', self::DEFAULT_IDLE_MAX_AGE_HOURS));
+    }
+
+    public static function forgetCache(): void
+    {
+        Cache::forget(self::CACHE_KEY);
+    }
+
+    // -----------------------------------------------------------------
+    // Assignment
+    // -----------------------------------------------------------------
+
+    public function assign(Lead $lead, ?int $exceptUserId = null, ?string $method = null): ?User
     {
         $rules = Cache::remember(self::CACHE_KEY, 300, fn () => AssignmentRule::active()->get());
 
         foreach ($rules as $rule) {
             if ($this->matchesConditions($lead, $rule->conditions ?? [])) {
-                $user = $this->pickUser($rule, $lead);
+                $user = $this->pickUser($rule, $lead, $exceptUserId);
                 if ($user) {
-                    $this->doAssign($lead, $user, $rule->method, $rule);
+                    $this->doAssign($lead, $user, $method ?: $rule->method, $rule);
+
                     return $user;
                 }
             }
         }
 
-        return $this->fallback($lead);
+        return $this->fallback($lead, $exceptUserId, $method);
+    }
+
+    /**
+     * The owner has not called within the idle window: give the lead to a
+     * different online agent and say why on the timeline.
+     */
+    public function reassignIdle(Lead $lead): ?User
+    {
+        $previous = $lead->assigned_to;
+        $user     = $this->assign($lead, $previous, 'idle_reassign');
+
+        if ($user && $user->id !== $previous) {
+            $from = $previous ? User::find($previous)?->name : null;
+
+            LeadActivity::create([
+                'lead_id'     => $lead->id,
+                'user_id'     => null,
+                'type'        => 'system',
+                'title'       => 'Reassigned (not called in time)',
+                'description' => ($from ? "{$from} did not call within " : 'Not called within ')
+                    . $this->idleMinutes() . " minutes; handed to {$user->name}.",
+            ]);
+        }
+
+        return $user;
     }
 
     /**
@@ -79,16 +155,9 @@ class AssignmentEngine
         });
     }
 
-    public function fallbackStrategy(): string
+    public function onlineAgentsExist(): bool
     {
-        $value = $this->settings->get('assignment', 'fallback', self::DEFAULT_FALLBACK);
-
-        return array_key_exists($value, self::FALLBACKS) ? $value : self::DEFAULT_FALLBACK;
-    }
-
-    public static function forgetCache(): void
-    {
-        Cache::forget(self::CACHE_KEY);
+        return User::query()->active()->available()->online($this->onlineMinutes())->exists();
     }
 
     /**
@@ -120,9 +189,13 @@ class AssignmentEngine
         return true;
     }
 
-    private function pickUser(AssignmentRule $rule, Lead $lead): ?User
+    // -----------------------------------------------------------------
+    // Picking
+    // -----------------------------------------------------------------
+
+    private function pickUser(AssignmentRule $rule, Lead $lead, ?int $exceptUserId): ?User
     {
-        $userIds = $rule->userIds();
+        $userIds = array_values(array_diff($rule->userIds(), array_filter([$exceptUserId])));
 
         if (empty($userIds)) {
             return null;
@@ -136,24 +209,22 @@ class AssignmentEngine
 
     private function roundRobin(array $userIds): ?User
     {
-        // Pick the user with the fewest leads assigned today, among the pool.
-        return $this->withTodayCount(User::whereIn('id', $userIds)->active()->available())->first();
+        return $this->candidates(User::whereIn('id', $userIds))->first();
     }
 
     private function skillBased(array $userIds, Lead $lead): ?User
     {
-        // Skill match based on language for now; extend as needed.
         $language = $lead->extra['language'] ?? null;
-        $query = User::whereIn('id', $userIds)->active()->available();
+        $query    = User::whereIn('id', $userIds);
 
         if ($language) {
             $query->where('language', $language);
         }
 
-        return $this->withTodayCount($query)->first() ?? $this->roundRobin($userIds);
+        return $this->candidates($query)->first() ?? $this->roundRobin($userIds);
     }
 
-    private function fallback(Lead $lead): ?User
+    private function fallback(Lead $lead, ?int $exceptUserId, ?string $method): ?User
     {
         $strategy = $this->fallbackStrategy();
 
@@ -161,25 +232,34 @@ class AssignmentEngine
             return null;
         }
 
-        $query = $this->withTodayCount(User::active()->available())
-            ->whereHas('roles', fn ($q) => $q->where('name', 'Telecaller'));
+        $query = User::query()->whereHas('roles', fn ($q) => $q->where('name', 'Telecaller'));
+
+        if ($exceptUserId) {
+            $query->where('id', '!=', $exceptUserId);
+        }
 
         if ($strategy === 'center_round_robin' && $lead->center_id) {
             $query->where('center_id', $lead->center_id);
         }
 
-        $user = $query->first();
+        $user = $this->candidates($query)->first();
 
         if ($user) {
-            $this->doAssign($lead, $user, 'round_robin');
+            $this->doAssign($lead, $user, $method ?: 'round_robin');
         }
 
         return $user;
     }
 
-    private function withTodayCount($query)
+    /**
+     * Active, marked available AND online, least loaded today first.
+     */
+    private function candidates(Builder $query): Builder
     {
         return $query
+            ->active()
+            ->available()
+            ->online($this->onlineMinutes())
             ->withCount(['assignedLeads as today_count' => fn ($q) => $q->whereDate('assigned_at', today())])
             ->orderBy('today_count')
             ->orderBy('id');
@@ -200,7 +280,6 @@ class AssignmentEngine
         });
 
         if ($rule) {
-            // Counter only; the rule cache stays warm.
             AssignmentRule::whereKey($rule->id)->increment('leads_count');
         }
     }

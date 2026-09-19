@@ -216,7 +216,7 @@ class PatientController extends Controller
     {
         $data = $request->validate([
             'name'         => ['required', 'string', 'max:191'],
-            'mobile'       => ['required', 'string', 'max:20'],
+            'mobile'       => ['required', 'string', 'max:20', new \App\Rules\IndianMobile()],
             'email'        => ['nullable', 'email', 'max:191'],
             'gender'       => ['nullable', 'in:male,female,other'],
             'age'          => ['nullable', 'integer', 'min:1', 'max:100'],

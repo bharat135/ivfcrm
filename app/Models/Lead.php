@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Support\AcquisitionChannel;
 use App\Support\CoupleDates;
+use App\Support\PhoneNumber;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -42,6 +44,17 @@ class Lead extends Model
         'extra'              => 'array',
     ];
 
+    /** Stored as exactly ten digits — no +91, no leading 0 — whatever was typed. */
+    protected function mobile(): Attribute
+    {
+        return Attribute::make(set: fn ($value) => PhoneNumber::indian($value));
+    }
+
+    protected function altMobile(): Attribute
+    {
+        return Attribute::make(set: fn ($value) => PhoneNumber::indian($value));
+    }
+
     protected static function booted(): void
     {
         static::creating(function (Lead $lead) {
@@ -49,7 +62,7 @@ class Lead extends Model
                 $lead->uuid = (string) Str::uuid();
             }
             if (empty($lead->dedup_hash) && $lead->mobile) {
-                $lead->dedup_hash = sha1(preg_replace('/\D/', '', $lead->mobile));
+                $lead->dedup_hash = PhoneNumber::dedupHash($lead->mobile);
             }
             if (empty($lead->channel)) {
                 $lead->channel = AcquisitionChannel::detect($lead->toArray());

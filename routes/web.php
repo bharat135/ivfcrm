@@ -42,6 +42,7 @@ Route::middleware(['auth', 'single.device'])->group(function () {
     // Leads
     Route::prefix('leads')->name('leads.')->group(function () {
         Route::get('/', [LeadController::class, 'index'])->name('index');
+        Route::get('/next', [LeadController::class, 'next'])->name('next');
         Route::get('/create', [LeadController::class, 'create'])->middleware('can:leads.create')->name('create');
         Route::post('/', [LeadController::class, 'store'])->middleware('can:leads.create')->name('store');
         Route::get('/{lead}', [LeadController::class, 'show'])->name('show');

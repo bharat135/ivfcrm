@@ -68,6 +68,7 @@ class IntakeConfigurationTest extends TestCase
             'is_active'    => true,
             'is_available' => true,
             'center_id'    => $this->admin->center_id ?: Center::value('id'),
+            'last_seen_at' => now(),
         ]);
         $this->telecaller->assignRole('Telecaller');
     }

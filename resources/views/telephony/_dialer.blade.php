@@ -512,6 +512,11 @@
                 delete lastSummary[id];
                 activeCall = null;
                 poll();
+                // On a lead / patient profile, flow straight on to the next lead.
+                if (res.next_url && /^\/(leads|patients)\/\d+/.test(window.location.pathname)) {
+                    window.location.href = res.next_url;
+                    return;
+                }
                 // Refresh any DataTable on the page so the outcome shows up.
                 if (window.jQuery && $.fn.DataTable) {
                     $.fn.DataTable.tables({ api: true }).ajax.reload(null, false);

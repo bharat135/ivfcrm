@@ -36,6 +36,7 @@ class User extends Authenticatable
         'active_call_log_id',
         'tata_agent_number',
         'meta',
+        'last_seen_at',
     ];
 
     protected $hidden = [
@@ -49,6 +50,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'last_seen_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
             'is_available' => 'boolean',
@@ -172,5 +174,16 @@ class User extends Authenticatable
     public function scopeAvailable($query)
     {
         return $query->where('is_active', true)->where('is_available', true);
+    }
+
+    /** Seen by the app within the last $minutes (TrackLastSeen middleware). */
+    public function scopeOnline($query, int $minutes = 5)
+    {
+        return $query->where('last_seen_at', '>=', now()->subMinutes($minutes));
+    }
+
+    public function isOnline(int $minutes = 5): bool
+    {
+        return $this->last_seen_at !== null && $this->last_seen_at->gte(now()->subMinutes($minutes));
     }
 }

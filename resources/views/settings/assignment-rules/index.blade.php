@@ -31,9 +31,23 @@
                         @endforeach
                     </select>
                     <div class="form-text">
-                        Round-robin picks the available agent with the fewest leads assigned today.
-                        An agent must be active and marked available to receive leads.
+                        Round-robin picks the <strong>online</strong> agent with the fewest leads assigned today.
+                        An agent must be active, marked available and seen in the app within the online window.
+                        Leads that arrive while nobody is online wait and are handed out the minute someone appears.
+                        Online now: <strong>{{ $presence['online_now'] }}</strong> agent(s).
                     </div>
+                </div>
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label fw-semibold mb-1">Online window (min)</label>
+                    <input type="number" id="onlineMinutes" class="form-control form-select-sm" min="1" max="120" value="{{ $presence['online_minutes'] }}">
+                </div>
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label fw-semibold mb-1">Reassign if not called in (min)</label>
+                    <input type="number" id="idleMinutes" class="form-control form-select-sm" min="5" max="1440" value="{{ $presence['idle_minutes'] }}">
+                </div>
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label fw-semibold mb-1">Only for enquiries newer than (hrs)</label>
+                    <input type="number" id="idleMaxAge" class="form-control form-select-sm" min="1" max="720" value="{{ $presence['idle_max_age_hours'] }}">
                 </div>
                 @can('assignment_rules.edit')
                 <div class="col-md-2">
@@ -278,7 +292,13 @@ $(function () {
     $('#btnSaveFallback').on('click', function () {
         const $btn = $(this).prop('disabled', true);
         $.ajax({ url: '{{ route('settings.assignment_rules.fallback') }}', method: 'PUT',
-            data: { _token: token, fallback: $('#fallbackSelect').val() },
+            data: {
+                _token: token,
+                fallback: $('#fallbackSelect').val(),
+                online_minutes: $('#onlineMinutes').val(),
+                idle_minutes: $('#idleMinutes').val(),
+                idle_max_age_hours: $('#idleMaxAge').val(),
+            },
             success(res) { toastr.success(res.message); },
             error(xhr)  { toastr.error(xhr.responseJSON?.message ?? 'Error.'); },
             complete()  { $btn.prop('disabled', false); }

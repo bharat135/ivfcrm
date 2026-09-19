@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'single.device' => SingleDeviceLogin::class,
         ]);
+
+        // Presence for lead assignment: only agents seen recently get leads.
+        $middleware->web(append: [\App\Http\Middleware\TrackLastSeen::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

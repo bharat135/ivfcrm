@@ -69,6 +69,12 @@ Schedule::call(function () {
         ->update(['status' => 'missed']);
 })->dailyAt('00:30')->name('mark-overdue-followups');
 
+// Presence-aware assignment: leads that arrived while nobody was online are
+// handed out the minute an agent appears, and an enquiry its owner has not
+// called within the idle window moves to another online agent.
+Schedule::job(new \App\Jobs\AssignPendingLeadsJob)->everyMinute()->name('assign-pending-leads')->withoutOverlapping();
+Schedule::job(new \App\Jobs\ReassignIdleLeadsJob)->everyFiveMinutes()->name('reassign-idle-leads')->withoutOverlapping();
+
 // Keep the Tata Smartflo access token fresh so panel calls never hit an expired
 // token. Runs often; the command itself only re-mints when near expiry.
 Schedule::command('tata:refresh-token')->everyThirtyMinutes()->withoutOverlapping();

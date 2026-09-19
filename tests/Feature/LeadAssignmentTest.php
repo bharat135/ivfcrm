@@ -8,6 +8,7 @@ use App\Models\Center;
 use App\Models\Lead;
 use App\Models\LeadSource;
 use App\Models\MetaLeadForm;
+use App\Models\Patient;
 use App\Models\User;
 use App\Services\AssignmentEngine;
 use App\Services\LeadService;
@@ -82,6 +83,7 @@ class LeadAssignmentTest extends TestCase
             'is_active'    => true,
             'is_available' => true,
             'center_id'    => $centerId,
+            'last_seen_at' => now(), // online: only present agents receive leads
         ]);
         $user->assignRole('Telecaller');
 
@@ -334,5 +336,149 @@ class LeadAssignmentTest extends TestCase
         // Running again re-reads the same window and must not duplicate.
         (new SyncMetaLeadFormsJob)->handle(app(MetaSyncService::class), app(MetaClient::class));
         $this->assertSame(1, Lead::where('external_lead_id', $remoteId)->count());
+    }
+
+    // =================================================================
+    // Presence-aware assignment, ten-digit numbers, next lead
+    // =================================================================
+
+    private function offlineTelecaller(string $name): User
+    {
+        $user = $this->telecaller($name, $this->telecaller->center_id);
+        $user->forceFill(['last_seen_at' => now()->subMinutes(30)])->save();
+
+        return $user;
+    }
+
+    public function test_only_online_agents_receive_leads_and_offline_ones_are_skipped(): void
+    {
+        AssignmentRule::query()->update(['is_active' => false]);
+        AssignmentEngine::forgetCache();
+
+        $offline = $this->offlineTelecaller('Offline Agent');
+        $this->colleague->forceFill(['last_seen_at' => now()->subMinutes(30)])->save();
+        // Only $this->telecaller is online (seen in setUp).
+
+        $lead = app(LeadService::class)->create(['name' => 'Online Only', 'mobile' => $this->mobile(), 'center_id' => $this->telecaller->center_id]);
+
+        $this->assertSame($this->telecaller->id, $lead->assigned_to);
+        $this->assertNotSame($offline->id, $lead->assigned_to);
+    }
+
+    public function test_a_lead_arriving_while_nobody_is_online_waits_and_is_assigned_when_someone_appears(): void
+    {
+        AssignmentRule::query()->update(['is_active' => false]);
+        AssignmentEngine::forgetCache();
+        User::query()->update(['last_seen_at' => null]);
+
+        $lead = app(LeadService::class)->create(['name' => 'Night Lead', 'mobile' => $this->mobile(), 'center_id' => $this->telecaller->center_id]);
+        $this->assertNull($lead->assigned_to, 'Nobody online: the lead must wait.');
+
+        (new \App\Jobs\AssignPendingLeadsJob)->handle(app(AssignmentEngine::class));
+        $this->assertNull($lead->fresh()->assigned_to, 'Still nobody online.');
+
+        User::whereKey($this->telecaller->id)->update(['last_seen_at' => now()]); // the agent opens the app
+        (new \App\Jobs\AssignPendingLeadsJob)->handle(app(AssignmentEngine::class));
+
+        $this->assertSame($this->telecaller->id, $lead->fresh()->assigned_to);
+    }
+
+    public function test_an_uncalled_lead_is_handed_to_another_online_agent_after_the_idle_window(): void
+    {
+        AssignmentRule::query()->update(['is_active' => false]);
+        AssignmentEngine::forgetCache();
+        $this->colleague->forceFill(['last_seen_at' => now()])->save();
+
+        $idle = app(LeadService::class)->create([
+            'name' => 'Idle Lead', 'mobile' => $this->mobile(), 'assigned_to' => $this->telecaller->id,
+            'center_id' => $this->telecaller->center_id,
+        ]);
+        $idle->forceFill(['assigned_at' => now()->subMinutes(45), 'lead_date' => now()->subHour()])->save();
+
+        $called = app(LeadService::class)->create([
+            'name' => 'Called Lead', 'mobile' => $this->mobile(), 'assigned_to' => $this->telecaller->id,
+            'center_id' => $this->telecaller->center_id,
+        ]);
+        $called->forceFill(['assigned_at' => now()->subMinutes(45), 'lead_date' => now()->subHour()])->save();
+        \App\Models\CallLog::create([
+            'lead_id' => $called->id, 'user_id' => $this->telecaller->id, 'provider' => 'tata', 'channel' => 'pstn',
+            'direction' => 'outbound', 'to_number' => $called->mobile, 'status' => 'completed', 'started_at' => now()->subMinutes(20),
+        ]);
+
+        (new \App\Jobs\ReassignIdleLeadsJob)->handle(app(AssignmentEngine::class));
+
+        $this->assertSame($this->colleague->id, $idle->fresh()->assigned_to, 'Not called in 30 min: moves to the other online agent.');
+        $this->assertSame($this->telecaller->id, $called->fresh()->assigned_to, 'A called lead stays put.');
+        $this->assertDatabaseHas('lead_activities', ['lead_id' => $idle->id, 'title' => 'Reassigned (not called in time)']);
+        $this->assertDatabaseHas('lead_assignments', ['lead_id' => $idle->id, 'assigned_to' => $this->colleague->id, 'method' => 'idle_reassign']);
+    }
+
+    public function test_mobile_numbers_are_stored_as_ten_digits_and_dedup_across_prefixes(): void
+    {
+        $ten = $this->mobile();
+
+        $lead = app(LeadService::class)->create(['name' => 'Prefix', 'mobile' => '+91 ' . substr($ten, 0, 5) . ' ' . substr($ten, 5)]);
+        $this->assertSame($ten, $lead->mobile);
+        $this->assertSame(sha1($ten), $lead->dedup_hash);
+        $this->assertSame($ten, Patient::where('lead_id', $lead->id)->value('mobile'));
+
+        $dupe = app(LeadService::class)->create(['name' => 'Prefix again', 'mobile' => '0' . $ten]);
+        $this->assertSame($lead->id, $dupe->id, '0-prefixed number is the same person.');
+
+        $this->assertSame('2212345678', \App\Support\PhoneNumber::indian('022-12345678'));
+        $this->assertSame('9876543210', \App\Support\PhoneNumber::indian('0091 98765 43210'));
+
+        $this->actingAs($this->telecaller)
+            ->post(route('leads.store'), ['name' => 'Short', 'mobile' => '12345'])
+            ->assertSessionHasErrors('mobile');
+    }
+
+    public function test_the_next_lead_prefers_uncalled_assignments_then_due_follow_ups(): void
+    {
+        AssignmentRule::query()->update(['is_active' => false]);
+        AssignmentEngine::forgetCache();
+
+        $followUpLead = app(LeadService::class)->create(['name' => 'Follow-up Lead', 'mobile' => $this->mobile(), 'assigned_to' => $this->telecaller->id]);
+        $followUpLead->forceFill(['status' => 'working', 'contact_attempts' => 1, 'first_contacted_at' => now()->subDay()])->save();
+        \App\Models\FollowUp::create([
+            'lead_id' => $followUpLead->id, 'user_id' => $this->telecaller->id, 'type' => 'call',
+            'scheduled_at' => now()->subMinutes(2), 'status' => 'pending',
+        ]);
+
+        $uncalled = app(LeadService::class)->create(['name' => 'Uncalled Lead', 'mobile' => $this->mobile(), 'assigned_to' => $this->telecaller->id]);
+
+        $this->actingAs($this->telecaller)->get(route('leads.next'))
+            ->assertRedirect(route('leads.show', $uncalled));
+
+        // After dispositioning the uncalled one, the due follow-up is next.
+        $this->actingAs($this->telecaller)->get(route('leads.next', ['after' => $uncalled->id]))
+            ->assertRedirect(route('leads.show', $followUpLead));
+
+        $uncalled->forceFill(['status' => 'working', 'contact_attempts' => 1])->save();
+        \App\Models\FollowUp::where('lead_id', $followUpLead->id)->update(['status' => 'completed']);
+
+        $this->actingAs($this->telecaller)->get(route('leads.next'))
+            ->assertRedirect(route('leads.index'));
+    }
+
+    public function test_saving_a_disposition_points_the_page_at_the_next_lead(): void
+    {
+        $lead = app(LeadService::class)->create(['name' => 'Dispo Lead', 'mobile' => $this->mobile(), 'assigned_to' => $this->telecaller->id]);
+        $disposition = \App\Models\Disposition::where('is_active', true)->where('requires_followup', false)->first();
+
+        $this->actingAs($this->telecaller)
+            ->postJson(route('leads.disposition', $lead), ['disposition_id' => $disposition->id, 'remark' => 'Spoke to the couple'])
+            ->assertOk()
+            ->assertJsonPath('next_url', route('leads.next', ['after' => $lead->id]));
+    }
+
+    public function test_browsing_the_app_marks_the_agent_as_seen(): void
+    {
+        $this->telecaller->forceFill(['last_seen_at' => null])->save();
+
+        $this->actingAs($this->telecaller)->get(route('leads.index'))->assertOk();
+
+        $this->assertNotNull($this->telecaller->fresh()->last_seen_at);
+        $this->assertTrue($this->telecaller->fresh()->isOnline());
     }
 }

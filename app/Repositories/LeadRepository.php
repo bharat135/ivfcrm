@@ -22,8 +22,7 @@ class LeadRepository extends BaseRepository
 
     public function findByMobile(string $mobile): ?Lead
     {
-        $hash = sha1(preg_replace('/\D/', '', $mobile));
-        return Lead::where('dedup_hash', $hash)->first();
+        return Lead::where('dedup_hash', \App\Support\PhoneNumber::dedupHash($mobile))->first();
     }
 
     public function findByEmail(string $email): ?Lead
@@ -36,8 +35,7 @@ class LeadRepository extends BaseRepository
         $query = Lead::query();
         $conditions = [];
 
-        if (!empty($data['mobile'])) {
-            $hash = sha1(preg_replace('/\D/', '', $data['mobile']));
+        if (!empty($data['mobile']) && ($hash = \App\Support\PhoneNumber::dedupHash($data['mobile']))) {
             $conditions[] = ['dedup_hash', $hash];
         }
         if (!empty($data['email'])) {
