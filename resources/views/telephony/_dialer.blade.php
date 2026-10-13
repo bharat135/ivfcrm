@@ -275,6 +275,13 @@
     // Placing calls
     // ------------------------------------------------------------------
     function dial(payload, $button) {
+        // When the in-browser softphone is registered, place the call from the
+        // browser itself: the customer's phone rings and there is no agent leg
+        // to answer first. Falls back to server click-to-call otherwise.
+        if (window.CrmSoftphone && window.CrmSoftphone.isRegistered()) {
+            return window.CrmSoftphone.call(payload, $button);
+        }
+
         $button?.prop('disabled', true);
 
         $.post(routes.dial, payload)
@@ -562,6 +569,10 @@
     // ------------------------------------------------------------------
     // Boot
     // ------------------------------------------------------------------
+    // The web softphone widget drives the disposition flow through poll() when
+    // a browser call ends, and reuses the dial route as its fallback.
+    window.CrmDialer = { poll, routes };
+
     poll();
     setInterval(poll, 5000);
 })();

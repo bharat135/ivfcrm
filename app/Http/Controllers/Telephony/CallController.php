@@ -79,7 +79,7 @@ class CallController extends Controller
     public function dial(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'number'     => ['nullable', 'string', 'max:20'],
+            'number'     => ['nullable', 'string', 'max:20', new \App\Rules\IndianMobile()],
             'lead_id'    => ['nullable', 'exists:leads,id'],
             'patient_id' => ['nullable', 'exists:patients,id'],
         ]);
@@ -113,11 +113,87 @@ class CallController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => $call->provider === 'tata'
-                ? 'Your phone is ringing — answer it and Smartflo will connect the customer.'
-                : 'Your softphone is ringing — answer it to connect the call.',
+            'message' => match (true) {
+                $call->provider === 'tata' && ($call->meta['call_order'] ?? null) === 'customer_first'
+                    => 'Calling the customer now — your phone rings as soon as they answer.',
+                $call->provider === 'tata'
+                    => 'Your phone is ringing — answer it and Smartflo will connect the customer.',
+                default
+                    => 'Your softphone is ringing — answer it to connect the call.',
+            },
             'call'    => $this->payload($call),
         ]);
+    }
+
+    /**
+     * Open a call log for a call the browser softphone is about to place over
+     * WebRTC. Returns the digits to dial so the customer's phone rings with no
+     * agent leg to answer first.
+     */
+    public function webrtcStart(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'number'     => ['nullable', 'string', 'max:20', new \App\Rules\IndianMobile()],
+            'lead_id'    => ['nullable', 'exists:leads,id'],
+            'patient_id' => ['nullable', 'exists:patients,id'],
+        ]);
+
+        $lead    = ! empty($data['lead_id']) ? Lead::find($data['lead_id']) : null;
+        $patient = ! empty($data['patient_id']) ? Patient::find($data['patient_id']) : null;
+        $number  = ($data['number'] ?? null) ?: $lead?->mobile ?: $patient?->mobile;
+
+        if (! $number) {
+            return response()->json(['success' => false, 'message' => 'No phone number available for this contact.'], 422);
+        }
+
+        try {
+            $call = $this->calls->openWebrtcCall($request->user(), $number, $lead, $patient);
+        } catch (TelephonyException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->displayMessage(),
+                'pending_call_id' => $e->raw['pending_call_id'] ?? null,
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Dialling the customer from your browser…',
+            'call'    => $this->payload($call),
+            'dial'    => $call->to_number,
+        ]);
+    }
+
+    /**
+     * Lifecycle events the browser softphone reports for a WebRTC call it
+     * placed: answered, then hangup with the talk time it measured.
+     */
+    public function webrtcEvent(Request $request, CallLog $call): JsonResponse
+    {
+        $this->authorizeCall($request, $call);
+
+        $data = $request->validate([
+            'event'        => ['required', Rule::in(['answered', 'hangup'])],
+            'talk_seconds' => ['nullable', 'integer', 'min:0', 'max:86400'],
+            'cause'        => ['nullable', 'string', 'max:120'],
+        ]);
+
+        if ($data['event'] === 'answered') {
+            if (! $call->answered_at) {
+                $this->calls->markAnswered($call);
+            }
+
+            return response()->json(['success' => true]);
+        }
+
+        $this->calls->finalize($call, array_filter([
+            'talk_seconds' => $data['talk_seconds'] ?? null,
+            'status'       => ($data['talk_seconds'] ?? 0) > 0 ? 'completed' : 'no-answer',
+            'hangup_cause' => $data['cause'] ?? null,
+            'hangup_by'    => 'agent',
+        ], fn ($v) => $v !== null));
+
+        return response()->json(['success' => true, 'call' => $this->payload($call->fresh())]);
     }
 
     /**
@@ -362,8 +438,10 @@ class CallController extends Controller
             'success'  => true,
             'message'  => 'Call outcome saved.',
             'call'     => $this->payload($call),
-            // The profile page moves straight on to the next lead.
-            'next_url' => route('leads.next', ['after' => $call->lead_id]),
+            // The profile page moves straight on to the next lead: the next
+            // one in a bulk-calling run, else the usual pick.
+            'next_url' => \App\Models\DialSession::advanceAfter($request->user(), $call->lead_id)
+                ?? route('leads.next', ['after' => $call->lead_id]),
         ]);
     }
 
@@ -376,7 +454,7 @@ class CallController extends Controller
             'lead_id'            => ['nullable', 'exists:leads,id'],
             'patient_id'         => ['nullable', 'exists:patients,id'],
             'direction'          => ['required', Rule::in(['inbound', 'outbound'])],
-            'to_number'          => ['nullable', 'string', 'max:20'],
+            'to_number'          => ['nullable', 'string', 'max:20', new \App\Rules\IndianMobile()],
             'status'             => ['required', 'string', 'max:30'],
             'talk_seconds'       => ['nullable', 'integer', 'min:0', 'max:86400'],
             'disposition_id'     => ['nullable', 'exists:dispositions,id'],
@@ -470,7 +548,7 @@ class CallController extends Controller
         $centerId = $request->integer('center_id') ?: null;
 
         $liveCalls = CallLog::live()
-            ->with(['user:id,name', 'lead:id,name'])
+            ->with(['user:id,name', 'lead:id,name', 'patient:id,wife_name,husband_name'])
             ->when($centerId, fn ($q) => $q->where('center_id', $centerId))
             ->get()
             ->map(fn (CallLog $c) => [

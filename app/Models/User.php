@@ -35,6 +35,7 @@ class User extends Authenticatable
         'call_status_changed_at',
         'active_call_log_id',
         'tata_agent_number',
+        'tata_c2c_support_key',
         'meta',
         'last_seen_at',
     ];
@@ -56,11 +57,18 @@ class User extends Authenticatable
             'is_available' => 'boolean',
             'daily_lead_cap' => 'integer',
             'call_status_changed_at' => 'datetime',
+            // A Smartflo API key: never readable from a database dump.
+            'tata_c2c_support_key' => 'encrypted',
             'meta' => 'array',
         ];
     }
 
     // Relationships
+    public function doctor()
+    {
+        return $this->hasOne(\App\Models\Doctor::class);
+    }
+
     public function center(): BelongsTo
     {
         return $this->belongsTo(Center::class);

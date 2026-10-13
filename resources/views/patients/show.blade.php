@@ -45,6 +45,10 @@
     {{-- ============================================================== --}}
     <div class="profile-main">
 
+        @if($lead)
+            @include('partials.profile._dial_session', ['lead' => $lead])
+        @endif
+
         <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
             <div class="profile-identity">
                 <a href="{{ request()->routeIs('leads.*') ? route('leads.index') : route('patients.index') }}" class="profile-back" aria-label="Back to list">
@@ -60,9 +64,17 @@
             <div class="d-flex align-items-center gap-2">
                 @include('telephony._call_button', [
                     'number'       => $patient->mobile,
+                    'leadId'       => $lead?->id,
                     'patientId'    => $patient->id,
                     'showWhatsApp' => true,
                 ])
+                @if(! empty($whatsappPanels) && auth()->user()->can('conversations.create'))
+                    {{-- Opens the Messages tab and focuses the composer: the
+                         message is sent from this screen, not the inbox. --}}
+                    <button type="button" class="btn btn-sm btn-outline-success" id="btnProfileWhatsApp" title="Send a WhatsApp message from here">
+                        <i class="bi bi-whatsapp me-1"></i>WhatsApp
+                    </button>
+                @endif
                 @can('call_logs.view')
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="btnRecordings" data-url="{{ route('patients.recordings', $patient) }}">
                         <i class="bi bi-record-circle me-1"></i>Recordings
@@ -112,6 +124,28 @@
             <div class="tab-pane fade {{ $active === 'overview' ? 'show active' : '' }}" id="tabOverview" role="tabpanel">
                 @if($lead)
                     @include('partials.profile._disposition', ['lead' => $lead, 'dispositions' => $dispositions])
+                @endif
+
+                @if(($sourceTouches ?? collect())->count() > 1)
+                    {{-- Multi-touch attribution: every channel this person has
+                         enquired through, in order (first Meta, later Google…). --}}
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-transparent py-2">
+                            <h6 class="mb-0 fw-semibold small"><i class="bi bi-signpost-split me-1"></i>Source journey <span class="fw-normal text-muted">— every enquiry, with the channel it came from</span></h6>
+                        </div>
+                        <div class="card-body d-flex flex-wrap align-items-center gap-2">
+                            @foreach($sourceTouches as $touch)
+                                @if(!$loop->first)<i class="bi bi-arrow-right text-muted"></i>@endif
+                                <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                                      style="background: {{ $touch->channelColor() }}1a; color: {{ $touch->channelColor() }}; border:1px solid {{ $touch->channelColor() }}55">
+                                    <i class="bi {{ $touch->channelIcon() }}"></i>
+                                    {{ $touch->channelLabel() }}
+                                    @if($touch->campaign)· {{ \Illuminate\Support\Str::limit($touch->campaign->name, 24) }}@elseif($touch->source)· {{ \Illuminate\Support\Str::limit($touch->source->name, 24) }}@endif
+                                    <span class="opacity-75">· {{ $touch->occurred_at?->format('d-m-Y') }}</span>
+                                </span>
+                            @endforeach
+                        </div>
+                    </div>
                 @endif
 
                 <h6 class="fw-semibold small text-muted mb-3">Log <span class="fw-normal">— every call, owner change, edit and follow-up, with who and when</span></h6>
@@ -166,29 +200,60 @@
                 @endforelse
             </div>
 
-            {{-- Calls --}}
+            {{-- Calls: full Tata outcome per call — disposition, sub-disposition,
+                 the agent's note / AI summary, and the recording. --}}
             <div class="tab-pane fade {{ $active === 'calls' ? 'show active' : '' }}" id="tabCalls" role="tabpanel">
                 @forelse($calls as $call)
-                    <div class="task-row">
-                        <i class="bi bi-telephone{{ $call->direction === 'inbound' ? '-inbound' : '-outbound' }} text-{{ $call->status === 'completed' ? 'success' : 'secondary' }}"></i>
-                        <span class="task-title">
-                            {{ ucfirst($call->direction) }}
-                            <span class="text-muted">· {{ $call->status }}</span>
-                            @if($call->remark)
-                                <div class="text-muted small text-truncate">{{ $call->remark }}</div>
+                    @php
+                        $summary = $call->transcript?->summary;
+                        $isAiSummary = $call->transcript?->summary_source === 'ai';
+                    @endphp
+                    <div class="d-flex gap-3 pb-3 mb-3 border-bottom">
+                        <div class="timeline-marker">
+                            <i class="bi bi-telephone{{ $call->direction === 'inbound' ? '-inbound' : '-outbound' }} text-{{ $call->status === 'completed' ? 'success' : 'secondary' }}"></i>
+                        </div>
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <strong class="small">{{ ucfirst($call->direction) }} call</strong>
+                                    <span class="badge text-bg-{{ $call->statusBadge() }}">{{ ucfirst(str_replace('-', ' ', $call->status)) }}</span>
+                                    @if($call->disposition)
+                                        <span class="badge" style="background: {{ $call->disposition->color }}">{{ $call->disposition->name }}</span>
+                                    @endif
+                                    @if($call->subDisposition)
+                                        <span class="badge bg-light text-dark border">{{ $call->subDisposition->name }}</span>
+                                    @endif
+                                    @if($call->provider === 'tata')
+                                        <span class="badge bg-light text-muted border" title="Placed over Tata Smartflo"><i class="bi bi-telephone-outbound me-1"></i>Tata</span>
+                                    @endif
+                                </div>
+                                <span class="text-muted small text-nowrap">{{ $call->started_at?->format('d-m-Y, h:i A') }}</span>
+                            </div>
+
+                            @if($summary || $call->remark)
+                                <div class="small mt-1">
+                                    {{ $summary ?: $call->remark }}
+                                    @if($summary && $isAiSummary)
+                                        <span class="badge bg-primary-subtle text-primary ms-1" title="Summarised by AI from the call transcript"><i class="bi bi-stars me-1"></i>AI</span>
+                                    @endif
+                                </div>
+                                @if($summary && $call->remark && $call->remark !== $summary)
+                                    <div class="text-muted small mt-1"><i class="bi bi-pencil me-1"></i>{{ $call->remark }}</div>
+                                @endif
                             @endif
-                        </span>
-                        @if($call->disposition)
-                            <span class="badge" style="background: {{ $call->disposition->color }}">{{ $call->disposition->name }}</span>
-                        @endif
-                        <span class="task-date">
-                            <i class="bi bi-clock"></i>
-                            {{ $call->talk_seconds ? gmdate('i:s', $call->talk_seconds) : '—' }}
-                        </span>
-                        <span class="task-date">{{ $call->started_at?->format('d-m-Y, h:i A') }}</span>
-                        @if($call->hasRecording())
-                            <audio controls preload="none" src="{{ $call->recordingUrl() }}" style="height:30px"></audio>
-                        @endif
+
+                            <div class="d-flex align-items-center gap-3 mt-2 flex-wrap">
+                                <span class="text-body-tertiary small">
+                                    <i class="bi bi-clock me-1"></i>{{ $call->talk_seconds ? gmdate('i:s', $call->talk_seconds) : 'No talk time' }}
+                                </span>
+                                @if($call->user)
+                                    <span class="text-body-tertiary small"><i class="bi bi-person me-1"></i>{{ $call->user->name }}</span>
+                                @endif
+                                @if($call->hasRecording())
+                                    <audio controls preload="none" src="{{ $call->recordingUrl() }}" style="height:30px;max-width:260px"></audio>
+                                @endif
+                            </div>
+                        </div>
                     </div>
                 @empty
                     <p class="text-muted text-center py-4"><i class="bi bi-telephone-x me-1"></i>No calls yet</p>
@@ -197,7 +262,21 @@
 
             {{-- Messages --}}
             <div class="tab-pane fade {{ $active === 'messages' ? 'show active' : '' }}" id="tabMessages" role="tabpanel">
-                @forelse($conversations as $conversation)
+                @can('conversations.view')
+                    {{-- One WhatsApp window per number on the record. --}}
+                    @include('chat._lead_thread', ['whatsappPanels' => $whatsappPanels])
+                @endcan
+
+                @php
+                    $inPanels = collect($whatsappPanels)->pluck('conversation.id')->filter()->all();
+                    $otherConversations = $conversations->reject(fn ($c) => in_array($c->id, $inPanels, true));
+                @endphp
+
+                @if($otherConversations->isNotEmpty())
+                    <h6 class="fw-semibold small text-muted mb-2">Other conversations</h6>
+                @endif
+
+                @forelse($otherConversations as $conversation)
                     <a href="{{ route('chat.index', ['conversation' => $conversation->id]) }}"
                        class="task-row text-decoration-none">
                         <i class="bi {{ $conversation->channelIcon() }}" style="color: {{ $conversation->channelColor() }}"></i>
@@ -213,7 +292,9 @@
                         <span class="task-date">{{ $conversation->last_message_at?->diffForHumans() }}</span>
                     </a>
                 @empty
-                    <p class="text-muted text-center py-4"><i class="bi bi-chat-dots me-1"></i>No conversations yet</p>
+                    @if(empty($whatsappPanels) || ! auth()->user()->can('conversations.view'))
+                        <p class="text-muted text-center py-4"><i class="bi bi-chat-dots me-1"></i>No conversations yet</p>
+                    @endif
                 @endforelse
             </div>
 
@@ -348,8 +429,20 @@
                         <label class="form-label small fw-semibold">Doctor <span class="text-danger">*</span></label>
                         <select class="form-select form-select-sm" name="doctor_id" required>
                             <option value="">Select</option>
-                            @foreach($doctors as $doctor)<option value="{{ $doctor->id }}">{{ $doctor->name }}</option>@endforeach
+                            @foreach($doctors as $doctor)
+                                <option value="{{ $doctor->id }}" @selected($patient->primary_doctor_id == $doctor->id)>Dr. {{ $doctor->name }}{{ $doctor->specialization ? ' — ' . $doctor->specialization : '' }}</option>
+                            @endforeach
                         </select>
+                        @if($doctors->isEmpty())
+                            <div class="form-text text-danger">
+                                No active doctors yet.
+                                @can('doctors.create')
+                                    <a href="{{ route('settings.doctors.index') }}">Add doctors under Settings → Doctors</a> first.
+                                @else
+                                    Ask an administrator to add doctors under Settings → Doctors.
+                                @endcan
+                            </div>
+                        @endif
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Centre <span class="text-danger">*</span></label>

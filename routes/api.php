@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AsteriskWebhookController;
 use App\Http\Controllers\Api\V1\LeadApiController;
 use App\Http\Controllers\Api\V1\MetaWebhookController;
 use App\Http\Controllers\Api\V1\TataWebhookController;
+use App\Http\Controllers\Api\V1\ThirdPartyWhatsAppWebhookController;
 use App\Http\Controllers\Api\V1\WebhookController;
 use App\Http\Controllers\CallLogController;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,11 @@ Route::prefix('webhooks')->group(function () {
     // and page (leadgen) subscriptions.
     Route::get('/meta',  [MetaWebhookController::class, 'verify']);
     Route::post('/meta', [MetaWebhookController::class, 'handle']);
+
+    // Third-party WhatsApp API (1automations). The token is generated per
+    // account in Settings → Integrations and is the authentication.
+    Route::get('/whatsapp-provider/{token}',  [ThirdPartyWhatsAppWebhookController::class, 'verify'])->where('token', '[A-Za-z0-9]+');
+    Route::post('/whatsapp-provider/{token}', [ThirdPartyWhatsAppWebhookController::class, 'handle'])->where('token', '[A-Za-z0-9]+');
 
     // Legacy Facebook leadgen endpoint, kept so existing subscriptions keep working.
     Route::get('/facebook',  [WebhookController::class, 'facebook']);
@@ -45,6 +51,7 @@ Route::prefix('webhooks')->group(function () {
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
     // Leads
+    Route::get('leads',                      [LeadApiController::class, 'index']);
     Route::post('leads',                     [LeadApiController::class, 'store']);
     Route::get('leads/{lead}',               [LeadApiController::class, 'show']);
     Route::post('leads/{lead}/disposition',  [LeadApiController::class, 'updateDisposition']);

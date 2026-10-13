@@ -37,7 +37,7 @@ class InboxController extends Controller
     {
         $agents = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
 
-        $templates = WhatsappTemplate::approved()->orderBy('name')->get();
+        $templates = WhatsappTemplate::approved()->forDefaultSender()->orderBy('name')->get();
 
         return view('chat.index', [
             'agents'        => $agents,
@@ -278,7 +278,11 @@ class InboxController extends Controller
         $data = $request->validate([
             'lead_id'    => ['nullable', 'exists:leads,id'],
             'patient_id' => ['nullable', 'exists:patients,id'],
-            'mobile'     => ['nullable', 'string', 'max:20'],
+            'mobile'     => ['nullable', 'string', 'max:20', new \App\Rules\IndianMobile()],
+            // Which of the record's numbers to chat with. The browser names the
+            // slot rather than the number, so a telecaller who only ever sees a
+            // masked number can still open the alternate-number thread.
+            'slot'       => ['nullable', Rule::in(['mobile', 'alt_mobile'])],
         ]);
 
         // Meta forbids business-initiated Messenger and Instagram threads, so
@@ -287,7 +291,8 @@ class InboxController extends Controller
         $patient = ! empty($data['patient_id']) ? Patient::find($data['patient_id']) : null;
 
         // validate() only returns keys that were present, so each is optional here.
-        $mobile = ($data['mobile'] ?? null) ?: $lead?->mobile ?: $patient?->mobile;
+        $slot   = $data['slot'] ?? 'mobile';
+        $mobile = ($data['mobile'] ?? null) ?: $lead?->{$slot} ?: $patient?->{$slot};
 
         if (! $mobile) {
             return response()->json(['success' => false, 'message' => 'No mobile number available for this contact.'], 422);

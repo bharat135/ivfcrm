@@ -67,6 +67,11 @@
                         <small class="text-muted">The number Smartflo rings for click-to-call. Blank = use Phone.</small>
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label">Smartflo customer-first API key</label>
+                        <input type="text" class="form-control font-monospace" name="tata_c2c_support_key" placeholder="Click-to-Call Support key for this agent" autocomplete="off">
+                        <small class="text-muted">Only for "Customer first" calling: a Click-to-Call Support key whose destination is this agent. Blank = account-wide key.</small>
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label">Password <span class="text-danger" id="pwRequired">*</span></label>
                         <input type="password" class="form-control" name="password" id="passwordField">
                         <small class="text-muted d-none" id="pwHint">Leave blank to keep current password</small>
@@ -192,6 +197,7 @@ $(function () {
             $('[name=language]').val(res.user.language);
             $('[name=daily_lead_cap]').val(res.user.daily_lead_cap);
             $('[name=tata_agent_number]').val(res.user.tata_agent_number);
+            $('[name=tata_c2c_support_key]').val(res.user.tata_c2c_support_key || '');
             $('#isActive').prop('checked', res.user.is_active);
             modal.show();
         });

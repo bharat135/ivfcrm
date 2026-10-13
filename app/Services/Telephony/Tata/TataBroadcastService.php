@@ -29,6 +29,8 @@ class TataBroadcastService
         return Lead::query()
             ->whereNull('merged_into_id')
             ->whereNotNull('mobile')
+            // Voice broadcasts only go to Indian mobiles.
+            ->where('mobile', 'regexp', '^[6-9][0-9]{9}$')
             ->when(! empty($filters['stage_id']), fn ($q) => $q->where('stage_id', $filters['stage_id']))
             ->when(! empty($filters['source_id']), fn ($q) => $q->where('lead_source_id', $filters['source_id']))
             ->when(! empty($filters['center_id']), fn ($q) => $q->where('center_id', $filters['center_id']))

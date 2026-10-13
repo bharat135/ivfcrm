@@ -282,6 +282,54 @@ class SmartfloClient
     }
 
     /**
+     * POST /v1/click_to_call_support — dial the CUSTOMER first; once they
+     * answer, Smartflo rings the destination configured on the API key (an
+     * agent, department or IVR). The agent never waits through ringing.
+     *
+     * @param  array<string,string>  $custom  Echoed back on every webhook as
+     *                                        `custom_identifier`.
+     * @return array{success:bool, message:string, ref_id:?string}
+     */
+    public function clickToCallSupport(
+        string $customerNumber,
+        string $apiKey,
+        ?string $callerId = null,
+        array $custom = [],
+        ?int $customerRingTimeout = null,
+        ?int $callTimeout = null,
+    ): array {
+        $payload = array_filter([
+            'customer_number'       => $customerNumber,
+            'api_key'               => $apiKey,
+            'caller_id'             => $callerId ?: $this->callerId(),
+            'async'                 => 1,
+            'customer_ring_timeout' => $customerRingTimeout,
+            'call_timeout'          => $callTimeout ?: ($this->callTimeout() ?: null),
+            'custom_identifier'     => $custom ?: null,
+        ], fn ($v) => $v !== null && $v !== '');
+
+        $response = $this->request('POST', '/v1/click_to_call_support', $payload, 'Tata Smartflo could not place the customer-first call.');
+
+        $body = $response->json() ?: [];
+
+        if (! ($body['success'] ?? false)) {
+            throw TataException::fromResponse('Tata Smartflo refused the customer-first call request.', $body, $response->status());
+        }
+
+        return [
+            'success' => true,
+            'message' => (string) ($body['message'] ?? 'Call originated successfully.'),
+            'ref_id'  => isset($body['ref_id']) ? (string) $body['ref_id'] : ($body['call_id'] ?? null),
+        ];
+    }
+
+    /** Account-wide Click-to-Call Support API key (customer-first calling). */
+    public function c2cSupportKey(): ?string
+    {
+        return $this->credential('tata_c2c_support_key', config('telephony.tata.c2c_support_key'));
+    }
+
+    /**
      * POST /v1/call/hangup — end a live call by its Smartflo call id.
      */
     public function hangup(string $callId): array

@@ -18,6 +18,14 @@ class DispositionController extends Controller
                 ->withCount('children');
 
             return DataTables::of($query)
+                // The data key is snake_case but the relation is movesToStage;
+                // Yajra cannot bridge that on its own, so search/sort explicitly.
+                ->filterColumn('moves_to_stage.name', function ($q, $keyword) {
+                    $q->whereHas('movesToStage', fn ($s) => $s->where('name', 'like', "%{$keyword}%"));
+                })
+                ->orderColumn('moves_to_stage.name', function ($q, $direction) {
+                    $q->orderBy(\App\Models\PipelineStage::select('name')->whereColumn('pipeline_stages.id', 'dispositions.moves_to_stage_id')->limit(1), $direction);
+                })
                 ->addColumn('type', fn($d) =>
                     $d->parent_id ? "<span class='badge bg-secondary'>Sub</span>" : "<span class='badge bg-primary'>Primary</span>"
                 )

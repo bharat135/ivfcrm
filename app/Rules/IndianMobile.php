@@ -8,8 +8,8 @@ use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
  * Accepts "+91 98765 43210", "09876543210" or "9876543210" — anything that
- * reduces to exactly ten digits — and rejects short, foreign or garbled
- * numbers. The value is normalised on save, not here.
+ * reduces to exactly ten digits starting 6-9 — and rejects landlines, short,
+ * foreign or garbled numbers. The value is normalised on save, not here.
  */
 class IndianMobile implements ValidationRule
 {
@@ -19,8 +19,8 @@ class IndianMobile implements ValidationRule
             return;
         }
 
-        if (! PhoneNumber::isValidIndian((string) $value)) {
-            $fail('The :attribute must be a 10-digit Indian number (without +91 or a leading 0).');
+        if (! PhoneNumber::isIndianMobile((string) $value)) {
+            $fail('The :attribute must be a 10-digit Indian mobile number starting with 6, 7, 8 or 9.');
         }
     }
 }

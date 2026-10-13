@@ -28,8 +28,24 @@ class MetaException extends RuntimeException
     {
         $error = $body['error'] ?? [];
 
+        // Third-party APIs may return {"error":"…"} or {"message":"…"}.
+        if (is_string($error)) {
+            $error = ['message' => match (true) {
+                str_contains($error, 'invalid meta api version') => 'Invalid API version in the request URL. Set "App URL" to just the domain (e.g. https://crm.wapzy.org) and "API version" to e.g. v24.0.',
+                str_contains($error, '(phone_number_id) does not match') => 'This Phone Number ID does not belong to the access key. Check the Phone Number ID in the provider dashboard.',
+                str_contains($error, '(waba_id) does not match') => 'This WABA ID does not belong to the access key. Check the WABA ID in the provider dashboard.',
+                default => $error,
+            }];
+        }
+
+        $message = $error['message']
+            ?? (is_string($body['message'] ?? null) ? $body['message'] : null)
+            ?? ($status === 401 ? 'The API rejected the access key (401 Unauthorized).' : null)
+            ?? ($status === 404 ? 'The API endpoint was not found (404). Check the App URL and API version.' : null)
+            ?? 'Unknown WhatsApp API error (HTTP ' . $status . ').';
+
         return new self(
-            message: $error['message'] ?? 'Unknown Meta Graph API error.',
+            message: $message,
             errorCode: isset($error['code']) ? (int) $error['code'] : null,
             errorSubcode: isset($error['error_subcode']) ? (int) $error['error_subcode'] : null,
             errorType: $error['type'] ?? null,
@@ -48,6 +64,17 @@ class MetaException extends RuntimeException
     {
         if ($this->userMessage) {
             return trim(($this->userTitle ? $this->userTitle . ': ' : '') . $this->userMessage);
+        }
+
+        // (#100/33) "Unsupported post request. Object with ID 'x' does not exist…"
+        // is what Graph says when the Phone Number ID is wrong for this token
+        // or the token lacks whatsapp_business_messaging. Say that instead.
+        if ($this->errorCode === 100 && $this->errorSubcode === 33
+            && preg_match("/Object with ID '(\\d+)'/", $this->getMessage(), $m)) {
+            return 'Meta cannot find object ' . $m[1] . ' with the saved access token. '
+                . 'If this is the WhatsApp Phone Number ID, either the ID is wrong or the token lacks the '
+                . 'whatsapp_business_messaging permission / WABA assignment. Run "Test connection" under '
+                . 'Settings → Integrations to see which.';
         }
 
         return $this->getMessage();

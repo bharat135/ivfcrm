@@ -142,6 +142,30 @@ class CallService
         return in_array($value, ['mobile', 'softphone'], true) ? $value : 'mobile';
     }
 
+    /**
+     * `agent_first` (Smartflo click-to-call: agent rings, answers, then the
+     * customer is dialled) or `customer_first` (Click-to-Call Support API:
+     * the customer is dialled first and the agent only rings once they answer).
+     */
+    public function callOrder(): string
+    {
+        $value = app(\App\Support\SettingsRepository::class)->get('telephony', 'tata_call_order')
+            ?: config('telephony.tata.call_order', 'agent_first');
+
+        return $value === 'customer_first' ? 'customer_first' : 'agent_first';
+    }
+
+    public function customerFirst(): bool
+    {
+        return $this->usesTata() && $this->callOrder() === 'customer_first';
+    }
+
+    /** The Click-to-Call Support key that rings this agent: theirs, else the account's. */
+    public function c2cSupportKeyFor(User $agent): ?string
+    {
+        return $agent->tata_c2c_support_key ?: $this->tata->c2cSupportKey();
+    }
+
     // -----------------------------------------------------------------
     // Number handling
     // -----------------------------------------------------------------
@@ -150,6 +174,22 @@ class CallService
      * Reduce a number to digits and drop an Indian country code so CRM lookups
      * and PBX dialling agree on one representation.
      */
+    /**
+     * The clinic only calls Indian mobiles, so every outbound leg is checked
+     * here regardless of which provider carries it. Returns the bare ten
+     * digits Smartflo / Asterisk should dial.
+     */
+    private function dialableMobile(string $destination): string
+    {
+        $ten = \App\Support\PhoneNumber::mobile($destination);
+
+        if ($ten === null) {
+            throw new TelephonyException('Only 10-digit Indian mobile numbers can be dialled.');
+        }
+
+        return $ten;
+    }
+
     public function normalize(string $number): string
     {
         $digits = preg_replace('/\D/', '', $number);
@@ -224,11 +264,7 @@ class CallService
             throw new AsteriskException('Your SIP extension is disabled. Contact an administrator.');
         }
 
-        $number = $this->normalize($destination);
-
-        if (strlen($number) < 5) {
-            throw new AsteriskException('That does not look like a dialable number.');
-        }
+        $number = $this->dialableMobile($destination);
 
         // Fall back to whatever the number resolves to when no record was passed.
         if (! $lead && ! $patient) {
@@ -318,11 +354,16 @@ class CallService
             );
         }
 
-        $number = $this->normalize($destination);
+        $customerFirst = $this->customerFirst();
+        $supportKey    = $customerFirst ? $this->c2cSupportKeyFor($agent) : null;
 
-        if (strlen($number) < 5) {
-            throw new TataException('That does not look like a dialable number.');
+        if ($customerFirst && ! $supportKey) {
+            throw new TataException(
+                'Customer-first calling needs a Smartflo Click-to-Call Support API key. Add one under Tata → Configuration, or on your user profile.'
+            );
         }
+
+        $number = $this->dialableMobile($destination);
 
         if (! $lead && ! $patient) {
             ['lead' => $lead, 'patient' => $patient] = $this->resolveContact($number);
@@ -348,15 +389,26 @@ class CallService
         // which is how the hangup event finds its way back to this row.
         $custom = ['crm_call_id' => (string) $call->id];
 
-        $call->update(['meta' => ['custom_identifier' => $custom, 'agent_number' => $agentNumber]]);
+        $call->update(['meta' => [
+            'custom_identifier' => $custom,
+            'agent_number'      => $agentNumber,
+            'call_order'        => $customerFirst ? 'customer_first' : 'agent_first',
+        ]]);
 
         try {
-            $response = $this->tata->clickToCall(
-                agentNumber: $agentNumber,
-                destination: $number,
-                callerId: $callerId,
-                custom: $custom,
-            );
+            $response = $customerFirst
+                ? $this->tata->clickToCallSupport(
+                    customerNumber: $number,
+                    apiKey: $supportKey,
+                    callerId: $callerId,
+                    custom: $custom,
+                )
+                : $this->tata->clickToCall(
+                    agentNumber: $agentNumber,
+                    destination: $number,
+                    callerId: $callerId,
+                    custom: $custom,
+                );
         } catch (TataException $e) {
             $call->update([
                 'status'       => 'failed',
@@ -379,6 +431,49 @@ class CallService
         ]);
 
         $this->recordEvent($call, 'tata', 'originate', $response['ref_id'], $response);
+        $this->setAgentStatus($agent, 'ringing', $call);
+        $this->touchLead($lead);
+
+        return $call->fresh();
+    }
+
+    /**
+     * Open a call log for a call the agent's in-browser softphone places
+     * itself (WebRTC/SIP straight to Smartflo), so the customer's phone rings
+     * with no agent leg to answer. No Smartflo REST call is made here — the
+     * browser originates the audio; this only records it so disposition,
+     * history and the bulk-call queue behave exactly as for click-to-call.
+     */
+    public function openWebrtcCall(User $agent, string $destination, ?Lead $lead = null, ?Patient $patient = null): CallLog
+    {
+        $this->assertNoPendingDisposition($agent);
+
+        $number = $this->dialableMobile($destination);
+
+        if (! $lead && ! $patient) {
+            ['lead' => $lead, 'patient' => $patient] = $this->resolveContact($number);
+        }
+
+        $extension = $this->tataAgentNumber($agent);
+
+        $call = CallLog::create([
+            'lead_id'     => $lead?->id,
+            'patient_id'  => $patient?->id,
+            'user_id'     => $agent->id,
+            'center_id'   => $agent->center_id,
+            'provider'    => 'tata',
+            'channel'     => 'webrtc',
+            'direction'   => 'outbound',
+            'from_number' => $this->tataCallerIdFor($agent),
+            'to_number'   => $number,
+            'extension'   => $extension,
+            'status'      => 'ringing',
+            'started_at'  => now(),
+            'is_recorded' => true,
+            'meta'        => ['origin' => 'webrtc'],
+        ]);
+
+        $this->recordEvent($call, 'webrtc', 'originate', null, ['destination' => $number]);
         $this->setAgentStatus($agent, 'ringing', $call);
         $this->touchLead($lead);
 

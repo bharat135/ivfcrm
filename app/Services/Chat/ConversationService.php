@@ -112,6 +112,12 @@ class ConversationService
         if (! $conversation->assigned_to && $lead?->assigned_to) {
             $updates['assigned_to'] = $lead->assigned_to;
         }
+        // Reply the way the contact last wrote in: a message that arrived on
+        // another (active) account moves the thread to it — e.g. after
+        // switching from the direct Meta API to the third-party provider.
+        if ($account && $account->is_active && $conversation->channel_account_id !== $account->id) {
+            $updates['channel_account_id'] = $account->id;
+        }
         if ($updates) {
             $conversation->update($updates);
         }

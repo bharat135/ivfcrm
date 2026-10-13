@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\Center;
+use App\Models\Doctor;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -58,6 +59,7 @@ class UserController extends Controller
             'language'      => ['nullable', 'string', 'max:10'],
             'daily_lead_cap'=> ['nullable', 'integer', 'min:1'],
             'tata_agent_number' => ['nullable', 'string', 'max:30', 'regex:/^\+?[0-9]{3,20}$/', 'unique:users,tata_agent_number'],
+            'tata_c2c_support_key' => ['nullable', 'string', 'max:255'],
             'role'          => ['required', 'exists:roles,name'],
             'is_active'     => ['boolean'],
         ], [
@@ -76,10 +78,12 @@ class UserController extends Controller
             'language'      => $data['language'] ?? 'en',
             'daily_lead_cap'=> $data['daily_lead_cap'] ?? null,
             'tata_agent_number' => $data['tata_agent_number'] ?? null,
+            'tata_c2c_support_key' => $data['tata_c2c_support_key'] ?? null,
             'is_active'     => $request->boolean('is_active', true),
         ]);
 
         $user->assignRole($data['role']);
+        Doctor::syncFromUser($user);
 
         return response()->json(['success' => true, 'message' => 'User created successfully.']);
     }
@@ -110,6 +114,7 @@ class UserController extends Controller
             'daily_lead_cap'=> ['nullable', 'integer', 'min:1'],
             'tata_agent_number' => ['nullable', 'string', 'max:30', 'regex:/^\+?[0-9]{3,20}$/',
                                     Rule::unique('users', 'tata_agent_number')->ignore($user->id)],
+            'tata_c2c_support_key' => ['nullable', 'string', 'max:255'],
             'role'          => ['required', 'exists:roles,name'],
             'is_active'     => ['boolean'],
         ], [
@@ -127,6 +132,7 @@ class UserController extends Controller
             'language'      => $data['language'] ?? 'en',
             'daily_lead_cap'=> $data['daily_lead_cap'] ?? null,
             'tata_agent_number' => $data['tata_agent_number'] ?? null,
+            'tata_c2c_support_key' => $data['tata_c2c_support_key'] ?? null,
             'is_active'     => $request->boolean('is_active', true),
         ];
 
@@ -136,6 +142,7 @@ class UserController extends Controller
 
         $user->update($updateData);
         $user->syncRoles([$data['role']]);
+        Doctor::syncFromUser($user);
 
         return response()->json(['success' => true, 'message' => 'User updated successfully.']);
     }
@@ -158,6 +165,7 @@ class UserController extends Controller
         $this->authorize('update', $user);
 
         $user->update(['is_active' => !$user->is_active]);
+        Doctor::syncFromUser($user);
 
         return response()->json([
             'success' => true,

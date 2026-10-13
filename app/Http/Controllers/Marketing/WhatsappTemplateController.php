@@ -32,24 +32,50 @@ class WhatsappTemplateController extends Controller
     public function index(Request $request)
     {
         if ($request->ajax() || $request->wantsJson()) {
-            $query = WhatsappTemplate::with('channelAccount:id,name')
+            $source = (string) $request->input('source', '');
+
+            $query = WhatsappTemplate::with('channelAccount:id,name,provider')
+                ->when($source === 'shared', fn ($q) => $q->whereNull('channel_account_id'))
+                ->when(ctype_digit($source), fn ($q) => $q->where('channel_account_id', (int) $source))
                 ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
                 ->when($request->filled('category'), fn ($q) => $q->where('category', $request->string('category')));
 
             return DataTables::of($query)
+                ->addColumn('provider', fn (WhatsappTemplate $t) => $this->providerBadge($t->channelAccount))
                 ->addColumn('status_badge', fn (WhatsappTemplate $t) =>
                     '<span class="badge bg-' . $t->statusBadge() . '">' . e($t->status) . '</span>')
                 ->addColumn('preview', fn (WhatsappTemplate $t) =>
                     '<span class="text-muted small">' . e(\Illuminate\Support\Str::limit($t->body_text, 90)) . '</span>')
                 ->addColumn('vars', fn (WhatsappTemplate $t) => $t->variable_count ?: '—')
                 ->addColumn('action', fn (WhatsappTemplate $t) => view('marketing.templates._actions', ['template' => $t])->render())
-                ->rawColumns(['status_badge', 'preview', 'action'])
+                ->rawColumns(['provider', 'status_badge', 'preview', 'action'])
                 ->make(true);
         }
 
+        $accounts = ChannelAccount::where('channel', 'whatsapp')->orderByDesc('is_active')->orderByDesc('is_default')->orderBy('name')->get();
+        $default  = $accounts->first(fn (ChannelAccount $a) => $a->is_active && $a->is_default);
+
+        // Each WABA keeps its own templates, so the page works per provider:
+        // the direct Meta setup under Settings → Integrations ("shared") and
+        // every WhatsApp channel account (Meta or 1automations).
+        $sources = collect();
+
+        if ($this->client->wabaId()) {
+            $sources->put('shared', 'Meta Cloud API · Settings → Integrations');
+        }
+
+        foreach ($accounts as $account) {
+            $sources->put((string) $account->id, $account->name . ' · ' . $this->providerLabel($account)
+                . ($account->is_active && $account->is_default ? ' (default sender)' : '')
+                . ($account->is_active ? '' : ' (inactive)'));
+        }
+
         return view('marketing.templates.index', [
-            'accounts'   => ChannelAccount::where('channel', 'whatsapp')->get(),
-            'configured' => $this->client->wabaId() !== null,
+            'accounts'   => $accounts,
+            'sources'    => $sources,
+            'selectedSource' => $default ? (string) $default->id : ($sources->keys()->first() ?? ''),
+            'configured' => $this->client->wabaId() !== null
+                || $accounts->contains(fn (ChannelAccount $a) => ! empty($a->credentials['waba_id'])),
             'categories' => ['MARKETING' => 'Marketing', 'UTILITY' => 'Utility', 'AUTHENTICATION' => 'Authentication'],
             'languages'  => $this->languages(),
         ]);
@@ -223,6 +249,20 @@ class WhatsappTemplateController extends Controller
         }
 
         return $components;
+    }
+
+    private function providerLabel(?ChannelAccount $account): string
+    {
+        return $account?->isThirdPartyWhatsApp() ? '1automations' : 'Meta Cloud API';
+    }
+
+    private function providerBadge(?ChannelAccount $account): string
+    {
+        $third = $account?->isThirdPartyWhatsApp();
+
+        return '<span class="badge ' . ($third ? 'bg-info-subtle text-info-emphasis' : 'bg-primary-subtle text-primary-emphasis') . '">'
+            . e($this->providerLabel($account)) . '</span>'
+            . '<div class="small text-muted text-truncate" style="max-width:160px">' . e($account?->name ?? 'Settings → Integrations') . '</div>';
     }
 
     private function languages(): array

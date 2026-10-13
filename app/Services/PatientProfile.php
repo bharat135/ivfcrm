@@ -8,7 +8,10 @@ use App\Models\Doctor;
 use App\Models\Lead;
 use App\Models\Patient;
 use App\Models\User;
+use App\Models\WhatsappTemplate;
+use App\Services\Meta\WhatsAppService;
 use App\Support\PatientJourney;
+use App\Support\PhoneNumber;
 
 /**
  * Everything the person profile screen renders.
@@ -31,6 +34,7 @@ class PatientProfile
             'center', 'primaryDoctor', 'city', 'state',
             'lead.source', 'lead.assignedTo', 'lead.stage', 'lead.disposition',
             'lead.campaign', 'lead.adset', 'lead.ad',
+            'lead.sourceTouches.source', 'lead.sourceTouches.campaign',
             'documents.uploader',
             'appointments' => fn ($q) => $q->with('doctor:id,name')->latest('scheduled_at')->limit(25),
             'treatmentCycles' => fn ($q) => $q->with('doctor:id,name')->latest()->limit(10),
@@ -45,7 +49,16 @@ class PatientProfile
             : collect();
 
         $calls = $lead
-            ? $lead->callLogs()->with(['user:id,name', 'disposition:id,name,color'])->limit(25)->get()
+            ? $lead->callLogs()
+                ->with([
+                    'user:id,name',
+                    'disposition:id,name,color',
+                    'subDisposition:id,name,color',
+                    'transcript:id,call_log_id,summary,summary_source',
+                ])
+                ->latest('started_at')
+                ->limit(25)
+                ->get()
             : collect();
 
         $conversations = Conversation::query()
@@ -63,18 +76,73 @@ class PatientProfile
             'timeline'      => $timeline,
             'calls'         => $calls,
             'conversations' => $conversations,
+            'sourceTouches' => $lead?->sourceTouches ?? collect(),
+            'whatsappPanels'=> $this->whatsappPanels($patient, $lead),
+            // Approved templates so the embedded thread can reopen a closed
+            // 24h window from the profile itself, without going to the inbox.
+            'whatsappTemplates' => WhatsappTemplate::approved()->forDefaultSender()->orderBy('name')->get(),
             'cycle'         => $patient->treatmentCycles->first(),
             'nextVisit'     => $patient->appointments
                 ->where('scheduled_at', '>=', now())
                 ->sortBy('scheduled_at')
                 ->first(),
-            'doctors'      => Doctor::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'doctors'      => Doctor::where('is_active', true)->orderBy('name')->get(['id', 'name', 'center_id', 'specialization']),
             'centers'      => \App\Models\Center::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'dispositions' => Disposition::active()->primary()->with('children')->get(),
             'telecallers'  => User::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'stages'       => PatientJourney::options(),
             'activeTab'    => $tab,
         ];
+    }
+
+    /**
+     * One WhatsApp chat panel per distinct number on the record.
+     *
+     * A person often gives two numbers (their own and a spouse's), and each is
+     * its own WhatsApp account, so each gets its own thread. Numbers are
+     * de-duplicated on the ten-digit subscriber number so a lead and its
+     * patient sharing a mobile produce one panel, not two.
+     *
+     * @return list<array{slot:string, source:string, record_id:int, label:string, display:?string, conversation:?Conversation}>
+     */
+    private function whatsappPanels(Patient $patient, ?Lead $lead): array
+    {
+        $candidates = [
+            ['source' => 'lead',    'slot' => 'mobile',     'label' => 'Primary',   'raw' => $lead?->mobile,        'record_id' => $lead?->id],
+            ['source' => 'patient', 'slot' => 'mobile',     'label' => 'Primary',   'raw' => $patient->mobile,      'record_id' => $patient->id],
+            ['source' => 'lead',    'slot' => 'alt_mobile', 'label' => 'Alternate', 'raw' => $lead?->alt_mobile,    'record_id' => $lead?->id],
+            ['source' => 'patient', 'slot' => 'alt_mobile', 'label' => 'Alternate', 'raw' => $patient->alt_mobile,  'record_id' => $patient->id],
+        ];
+
+        $whatsapp = app(WhatsAppService::class);
+        $panels   = [];
+
+        foreach ($candidates as $candidate) {
+            $ten = PhoneNumber::indian($candidate['raw']);
+
+            if (! $ten || strlen($ten) < 10 || isset($panels[$ten]) || ! $candidate['record_id']) {
+                continue;
+            }
+
+            $normalized = $whatsapp->normalizeNumber($candidate['raw']);
+
+            $conversation = Conversation::query()
+                ->where('channel', 'whatsapp')
+                ->where(fn ($q) => $q->where('contact_identifier', $normalized)->orWhere('wa_id', $normalized))
+                ->latest('last_message_at')
+                ->first();
+
+            $panels[$ten] = [
+                'slot'         => $candidate['slot'],
+                'source'       => $candidate['source'],
+                'record_id'    => (int) $candidate['record_id'],
+                'label'        => $candidate['label'],
+                'display'      => PhoneNumber::display($candidate['raw']),
+                'conversation' => $conversation,
+            ];
+        }
+
+        return array_values($panels);
     }
 
     /**

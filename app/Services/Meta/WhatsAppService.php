@@ -14,16 +14,44 @@ use Illuminate\Support\Facades\Storage;
  */
 class WhatsAppService
 {
-    public function __construct(private MetaClient $client) {}
+    public function __construct(private MetaClient $meta) {}
 
     /**
      * A channel account may override the shared credentials with its own
-     * phone number id / token (useful when a center owns its own number).
+     * phone number id, WABA, token and even app id/secret (a number that
+     * belongs to a different Meta app). Every Graph call for that account
+     * goes through a client bound to those overrides, so the token, the
+     * appsecret_proof and the ids all come from the same place.
      */
+    private function client(?ChannelAccount $account = null): MetaClient
+    {
+        return $this->meta->forAccount($this->account($account));
+    }
+
+    /**
+     * The account a call should use. A conversation, broadcast or flow with
+     * no account (e.g. created before any channel account existed) goes out
+     * through the active default WhatsApp sender — "Default sender for this
+     * channel" — and only falls back to Settings → Integrations when there
+     * is no such account.
+     */
+    private function account(?ChannelAccount $account): ?ChannelAccount
+    {
+        // A deactivated sender must not send; its old conversations move to
+        // the default sender (e.g. switching from Meta to the third-party API).
+        if ($account && $account->is_active) {
+            return $account;
+        }
+
+        return ChannelAccount::where('channel', 'whatsapp')
+            ->where('is_active', true)
+            ->where('is_default', true)
+            ->first();
+    }
+
     private function phoneNumberId(?ChannelAccount $account = null): string
     {
-        $id = $account?->credentials['phone_number_id'] ?? null;
-        $id = $id ?: $this->client->phoneNumberId();
+        $id = $this->client($account)->phoneNumberId();
 
         if (! $id) {
             throw new MetaException('WhatsApp phone number ID is not configured. Add it under Settings → Integrations.');
@@ -34,13 +62,12 @@ class WhatsAppService
 
     private function token(?ChannelAccount $account = null): ?string
     {
-        return $account?->credentials['access_token'] ?? null;
+        return $this->account($account)?->credentials['access_token'] ?? null;
     }
 
     private function wabaId(?ChannelAccount $account = null): string
     {
-        $id = $account?->credentials['waba_id'] ?? null;
-        $id = $id ?: $this->client->wabaId();
+        $id = $this->client($account)->wabaId();
 
         if (! $id) {
             throw new MetaException('WhatsApp Business Account ID (WABA ID) is not configured.');
@@ -128,7 +155,22 @@ class WhatsAppService
             $payload['context'] = ['message_id' => $replyTo];
         }
 
-        return $this->dispatch($payload, $account);
+        try {
+            return $this->dispatch($payload, $account);
+        } catch (MetaException $e) {
+            // The 1automations docs name an uploaded media reference
+            // `media_id` where Meta uses `id`. Try Meta's name first; if the
+            // provider rejects the request, retry once with theirs. A rejected
+            // request sends nothing, so this cannot deliver twice.
+            if ($isLink || ! $this->client($account)->isThirdParty() || $e->isAuthError()) {
+                throw $e;
+            }
+
+            $payload[$type]['media_id'] = $payload[$type]['id'];
+            unset($payload[$type]['id']);
+
+            return $this->dispatch($payload, $account);
+        }
     }
 
     /**
@@ -252,7 +294,7 @@ class WhatsAppService
 
     private function dispatch(array $payload, ?ChannelAccount $account): array
     {
-        return $this->client->post(
+        return $this->client($account)->post(
             $this->phoneNumberId($account) . '/messages',
             $payload,
             $this->token($account),
@@ -286,7 +328,7 @@ class WhatsAppService
      */
     public function uploadMedia(string $absolutePath, string $mimeType, ?ChannelAccount $account = null): string
     {
-        $response = $this->client->upload(
+        $response = $this->client($account)->upload(
             $this->phoneNumberId($account) . '/media',
             $absolutePath,
             'file',
@@ -306,7 +348,7 @@ class WhatsAppService
      */
     public function mediaInfo(string $mediaId, ?ChannelAccount $account = null): array
     {
-        return $this->client->get($mediaId, [], $this->token($account));
+        return $this->client($account)->get($mediaId, [], $this->token($account));
     }
 
     /**
@@ -316,19 +358,27 @@ class WhatsAppService
      */
     public function downloadMedia(string $mediaId, ?ChannelAccount $account = null): ?array
     {
-        $info = $this->mediaInfo($mediaId, $account);
+        $client = $this->client($account);
 
-        $url = $info['url'] ?? null;
-        if (! $url) {
-            return null;
+        if ($client->isThirdParty()) {
+            [$binary, $mime] = $client->providerMedia($mediaId);
+            $info = [];
+        } else {
+            $info = $this->mediaInfo($mediaId, $account);
+
+            $url = $info['url'] ?? null;
+            if (! $url) {
+                return null;
+            }
+
+            $binary = $client->download($url, $this->token($account));
+            $mime   = $info['mime_type'] ?? null;
         }
 
-        $binary = $this->client->download($url, $this->token($account));
         if ($binary === null) {
             return null;
         }
 
-        $mime = $info['mime_type'] ?? null;
         $path = sprintf(
             '%s/%s/%s.%s',
             trim(config('meta.whatsapp.media_path'), '/'),
@@ -391,7 +441,7 @@ class WhatsAppService
 
     public function listTemplates(?ChannelAccount $account = null): array
     {
-        return $this->client->paginate(
+        return $this->client($account)->paginate(
             $this->wabaId($account) . '/message_templates',
             ['fields' => 'id,name,status,category,language,components,rejected_reason,quality_score'],
             maxPages: 20,
@@ -404,7 +454,7 @@ class WhatsAppService
      */
     public function createTemplate(array $payload, ?ChannelAccount $account = null): array
     {
-        return $this->client->post(
+        return $this->client($account)->post(
             $this->wabaId($account) . '/message_templates',
             $payload,
             $this->token($account),
@@ -413,7 +463,7 @@ class WhatsAppService
 
     public function deleteTemplate(string $name, ?ChannelAccount $account = null): array
     {
-        return $this->client->delete(
+        return $this->client($account)->delete(
             $this->wabaId($account) . '/message_templates',
             ['name' => $name],
             $this->token($account),
@@ -426,7 +476,7 @@ class WhatsAppService
 
     public function phoneNumbers(?ChannelAccount $account = null): array
     {
-        return $this->client->get(
+        return $this->client($account)->get(
             $this->wabaId($account) . '/phone_numbers',
             ['fields' => 'id,display_phone_number,verified_name,quality_rating,code_verification_status,platform_type,throughput'],
             $this->token($account),
@@ -435,7 +485,7 @@ class WhatsAppService
 
     public function businessProfile(?ChannelAccount $account = null): array
     {
-        return $this->client->get(
+        return $this->client($account)->get(
             $this->phoneNumberId($account) . '/whatsapp_business_profile',
             ['fields' => 'about,address,description,email,profile_picture_url,websites,vertical'],
             $this->token($account),
@@ -444,7 +494,7 @@ class WhatsAppService
 
     public function updateBusinessProfile(array $fields, ?ChannelAccount $account = null): array
     {
-        return $this->client->post(
+        return $this->client($account)->post(
             $this->phoneNumberId($account) . '/whatsapp_business_profile',
             array_merge(['messaging_product' => 'whatsapp'], $fields),
             $this->token($account),
@@ -457,7 +507,7 @@ class WhatsAppService
      */
     public function subscribeWebhook(?ChannelAccount $account = null): array
     {
-        return $this->client->post(
+        return $this->client($account)->post(
             $this->wabaId($account) . '/subscribed_apps',
             [],
             $this->token($account),
@@ -466,10 +516,29 @@ class WhatsAppService
 
     public function subscribedApps(?ChannelAccount $account = null): array
     {
-        return $this->client->get(
+        return $this->client($account)->get(
             $this->wabaId($account) . '/subscribed_apps',
             [],
             $this->token($account),
         )['data'] ?? [];
+    }
+
+    /**
+     * The app's own webhook configuration for WhatsApp Business Accounts
+     * (callback URL, fields, active), or null when none is set up. This is
+     * read with the app token, so it works even when Meta's per-WABA
+     * subscribed_apps read-back is failing.
+     */
+    public function appWebhookSubscription(): ?array
+    {
+        // App-level check for the app under Settings → Integrations, so it
+        // must not be redirected to the default sender's app.
+        foreach ($this->meta->appSubscriptions() as $subscription) {
+            if (($subscription['object'] ?? null) === 'whatsapp_business_account') {
+                return $subscription;
+            }
+        }
+
+        return null;
     }
 }

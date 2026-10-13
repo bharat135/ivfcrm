@@ -14,18 +14,29 @@
     #inbox {
         display: grid;
         grid-template-columns: 300px 1fr 272px;
-        height: calc(100vh - var(--topbar-height) - 44px);
+        /* Exactly the space left under the topbar once #main-content's
+           own padding (20px top, 40px bottom) is taken off, so the page
+           itself never scrolls — only the three panes do. */
+        grid-template-rows: minmax(0, 1fr);
+        height: calc(100vh - var(--topbar-height) - 60px);
+        min-height: 420px;
         border: 1px solid var(--fui-border-subtle);
         border-radius: var(--fui-radius-lg);
         overflow: hidden;
         background: var(--fui-surface);
     }
 
+    /* A grid/flex child defaults to min-height:auto, which lets a long
+       thread stretch the row past the viewport and get clipped instead of
+       scrolling. Pin every pane and the scroll regions to the track. */
+    #inbox > * { min-height: 0; }
+    #threadWrap { min-height: 0; }
+
     #convList { border-right: 1px solid var(--fui-border-subtle); display: flex; flex-direction: column; min-width: 0; }
     #threadPane { display: flex; flex-direction: column; min-width: 0; }
     #contextPane { border-left: 1px solid var(--fui-border-subtle); overflow-y: auto; background: var(--fui-surface-subtle); }
 
-    .conv-scroll { overflow-y: auto; flex: 1; }
+    .conv-scroll { overflow-y: auto; flex: 1; min-height: 0; }
 
     .conv-item {
         display: flex; gap: 9px;
@@ -68,8 +79,9 @@
 
     /* Message thread — a plain tinted canvas, no wallpaper texture. */
     #messages {
-        flex: 1; overflow-y: auto; padding: 16px 18px;
+        flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px;
         background: var(--fui-surface-subtle);
+        overscroll-behavior: contain;
     }
 
     .msg-row { display: flex; margin-bottom: 6px; }

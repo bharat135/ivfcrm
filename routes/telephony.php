@@ -29,6 +29,9 @@ Route::prefix('calls')->name('calls.')->middleware('can:call_logs.view')->group(
 
     // Placing calls
     Route::post('/dial', [CallController::class, 'dial'])->middleware('can:call_logs.create')->name('dial');
+    // In-browser softphone (WebRTC) originates the audio; these only log it.
+    Route::post('/webrtc/start', [CallController::class, 'webrtcStart'])->middleware('can:call_logs.create')->name('webrtc_start');
+    Route::post('/{call}/webrtc-event', [CallController::class, 'webrtcEvent'])->name('webrtc_event');
     Route::post('/dial-whatsapp', [CallController::class, 'dialWhatsApp'])->middleware('can:call_logs.create')->name('dial_whatsapp');
     Route::post('/request-permission', [CallController::class, 'requestCallPermission'])->name('request_permission');
     Route::post('/log', [CallController::class, 'logManual'])->middleware('can:call_logs.create')->name('log');

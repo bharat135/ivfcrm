@@ -138,6 +138,78 @@ class TataSmartfloTest extends TestCase
         Http::assertNothingSent();
     }
 
+    /**
+     * "Customer first": the CRM uses the Click-to-Call Support API, which
+     * dials the customer and only rings the agent once they have answered.
+     */
+    public function test_customer_first_calling_uses_the_support_api_and_the_agents_own_key(): void
+    {
+        $lead = Lead::create(['name' => 'Customer First', 'mobile' => '9811100099', 'status' => 'new']);
+
+        $this->settings->setMany(['tata_call_order' => 'customer_first', 'tata_c2c_support_key' => 'account-key-1'], 'telephony');
+
+        try {
+            Http::fake([
+                self::API . '/v1/click_to_call_support' => Http::response(['success' => true, 'message' => 'Originate successfully queued', 'ref_id' => 'C2CS-0001']),
+            ]);
+
+            // With no per-user key the account-wide key is used.
+            $response = $this->actingAs($this->agent)
+                ->postJson(route('calls.dial'), ['lead_id' => $lead->id])
+                ->assertOk()
+                ->assertJsonPath('success', true);
+
+            $this->assertStringContainsString('Calling the customer now', $response->json('message'));
+
+            $call = CallLog::find($response->json('call.id'));
+            $this->assertSame('customer_first', $call->meta['call_order']);
+            $this->assertSame('C2CS-0001', $call->provider_call_id);
+            $this->assertSame('9811100099', $call->to_number);
+
+            Http::assertSent(fn (Request $r) => $r->url() === self::API . '/v1/click_to_call_support'
+                && $r['customer_number'] === '9811100099'
+                && $r['api_key'] === 'account-key-1'
+                && $r['caller_id'] === '02240001111'
+                && $r['async'] === 1
+                && $r['custom_identifier'] === ['crm_call_id' => (string) $call->id]);
+            Http::assertNotSent(fn (Request $r) => str_ends_with($r->url(), '/v1/click_to_call'));
+
+            // The agent's own key (destination = this agent) wins over the account key.
+            $this->calls()->disposition($call, ['disposition_id' => \App\Models\Disposition::whereNull('parent_id')->first()->id, 'remark' => 'ok']);
+            $this->agent->forceFill(['tata_c2c_support_key' => 'agent-key-9'])->save();
+
+            $second = $this->actingAs($this->agent)->postJson(route('calls.dial'), ['lead_id' => $lead->id])->assertOk();
+
+            Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/v1/click_to_call_support') && $r['api_key'] === 'agent-key-9');
+
+            // Stored encrypted, read back in the clear.
+            $this->assertSame('agent-key-9', $this->agent->fresh()->tata_c2c_support_key);
+            $this->assertNotSame('agent-key-9', \Illuminate\Support\Facades\DB::table('users')->where('id', $this->agent->id)->value('tata_c2c_support_key'));
+
+            // No key anywhere: a clear message, and nothing is sent to Smartflo.
+            $this->calls()->disposition(CallLog::find($second->json('call.id')), ['disposition_id' => \App\Models\Disposition::whereNull('parent_id')->first()->id, 'remark' => 'ok']);
+            $this->settings->forget('telephony', 'tata_c2c_support_key');
+            $this->agent->forceFill(['tata_c2c_support_key' => null])->save();
+
+            Http::assertSentCount(2);
+
+            $response = $this->actingAs($this->agent)
+                ->postJson(route('calls.dial'), ['lead_id' => $lead->id])
+                ->assertStatus(422);
+
+            $this->assertStringContainsString('Click-to-Call Support API key', $response->json('message'));
+            Http::assertSentCount(2);
+        } finally {
+            $this->settings->forget('telephony', 'tata_call_order');
+            $this->settings->forget('telephony', 'tata_c2c_support_key');
+        }
+    }
+
+    private function calls(): \App\Services\Telephony\CallService
+    {
+        return app(\App\Services\Telephony\CallService::class);
+    }
+
     public function test_click_to_call_sends_the_right_request_and_records_the_call(): void
     {
         $lead = Lead::create(['name' => 'Smartflo Target', 'mobile' => '9811100011', 'status' => 'new']);

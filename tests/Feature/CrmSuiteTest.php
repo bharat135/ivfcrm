@@ -319,7 +319,8 @@ class CrmSuiteTest extends TestCase
             ->postJson(route('leads.disposition', $lead), [
                 'disposition_id'    => $disposition->id,
                 'remark'            => 'Spoke to the patient.',
-                'next_follow_up_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                // Inside call hours whatever time of day the suite runs.
+                'next_follow_up_at' => now()->addDay()->setTime(11, 0)->format('Y-m-d H:i:s'),
             ])
             ->assertOk();
 
@@ -399,7 +400,8 @@ class CrmSuiteTest extends TestCase
             ->postJson(route('followups.store'), [
                 'lead_id'      => $lead->id,
                 'type'         => 'call',
-                'scheduled_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                // Inside call hours whatever time of day the suite runs.
+                'scheduled_at' => now()->addDay()->setTime(11, 0)->format('Y-m-d H:i:s'),
                 'remark'       => 'Call back tomorrow.',
             ])
             ->assertOk()

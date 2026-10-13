@@ -42,6 +42,38 @@ class Doctor extends Model
         return $query->where('is_active', true);
     }
 
+    /**
+     * Keep a doctor record in step with a CRM login that holds the Doctor
+     * role, so creating the user is enough to make them bookable. Details a
+     * manager has already filled in on the Doctors screen are left alone;
+     * only gaps are filled from the user, and the record follows the user's
+     * active flag.
+     */
+    public static function syncFromUser(User $user): ?self
+    {
+        if (! $user->hasRole('Doctor')) {
+            return null;
+        }
+
+        $doctor = static::withTrashed()->firstOrNew(['user_id' => $user->id]);
+
+        if ($doctor->trashed()) {
+            $doctor->restore();
+        }
+
+        $doctor->fill([
+            'name'      => $doctor->name ?: preg_replace('/^\s*dr\.?\s+/i', '', $user->name),
+            'phone'     => $doctor->phone ?: $user->phone,
+            'email'     => $doctor->email ?: $user->email,
+            'center_id' => $doctor->center_id ?: $user->center_id,
+            'is_active' => (bool) $user->is_active,
+        ]);
+
+        $doctor->save();
+
+        return $doctor;
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

@@ -51,10 +51,41 @@ final class PhoneNumber
         return $n !== null && strlen($n) === 10;
     }
 
-    /** Indian mobiles start with 6-9; landlines do not. */
+    /**
+     * The ten digits of an Indian mobile, or null when the input is anything
+     * else. Strict on purpose: it is what forms and the dialler check.
+     *
+     * Accepted spellings all reduce to the same subscriber number:
+     *   9876543210, 09876543210, 919876543210, +91 98765 43210, 0091...
+     * Anything with extra digits (an extension, a foreign number, a typo) is
+     * rejected rather than trimmed, and landlines (not starting 6-9) fail.
+     */
+    public static function mobile(?string $raw): ?string
+    {
+        if ($raw === null) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/', '', $raw) ?? '';
+
+        if (str_starts_with($digits, '00')) {
+            $digits = substr($digits, 2);
+        }
+
+        $ten = match (true) {
+            strlen($digits) === 10                                 => $digits,
+            strlen($digits) === 11 && str_starts_with($digits, '0')  => substr($digits, 1),
+            strlen($digits) === 12 && str_starts_with($digits, '91') => substr($digits, 2),
+            default                                                => null,
+        };
+
+        return $ten !== null && preg_match('/^[6-9]\d{9}$/', $ten) ? $ten : null;
+    }
+
+    /** Indian mobiles are exactly ten digits starting 6-9; landlines and foreign numbers are not. */
     public static function isIndianMobile(?string $raw): bool
     {
-        return self::isValidIndian($raw) && (bool) preg_match('/^[6-9]\d{9}$/', self::indian($raw));
+        return self::mobile($raw) !== null;
     }
 
     /** "9876543210" -> "98XXXXXX10": enough to recognise, not enough to dial. */

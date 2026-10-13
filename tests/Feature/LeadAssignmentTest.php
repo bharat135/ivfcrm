@@ -413,6 +413,40 @@ class LeadAssignmentTest extends TestCase
         $this->assertDatabaseHas('lead_assignments', ['lead_id' => $idle->id, 'assigned_to' => $this->colleague->id, 'method' => 'idle_reassign']);
     }
 
+    public function test_quality_analysts_get_leads_only_through_a_custom_rule(): void
+    {
+        AssignmentRule::query()->update(['is_active' => false]);
+        AssignmentEngine::forgetCache();
+
+        $analyst = User::factory()->create([
+            'name' => 'Assignment Analyst', 'is_active' => true, 'is_available' => true,
+            'center_id' => $this->telecaller->center_id, 'last_seen_at' => now(),
+        ]);
+        $analyst->assignRole('Call Quality Analyst');
+
+        // The analyst is the only one online, yet the fallback must not pick them.
+        User::whereKeyNot($analyst->id)->update(['last_seen_at' => null]);
+
+        $lead = app(LeadService::class)->create(['name' => 'No Analyst', 'mobile' => $this->mobile(), 'center_id' => $analyst->center_id]);
+        $this->assertNull($lead->assigned_to);
+
+        $source = LeadSource::first();
+        AssignmentRule::create([
+            'name' => 'Source → analyst', 'priority' => 1, 'method' => 'round_robin', 'is_active' => true,
+            'conditions' => ['lead_source_id' => $source->id],
+            'targets'    => ['user_ids' => [$analyst->id]],
+        ]);
+        AssignmentEngine::forgetCache();
+
+        $routed = app(LeadService::class)->create(['name' => 'Analyst Rule', 'mobile' => $this->mobile(), 'lead_source_id' => $source->id]);
+        $this->assertSame($analyst->id, $routed->assigned_to);
+
+        // Working the lead needs the telecalling permissions.
+        $this->assertTrue($analyst->can('leads.edit'));
+        $this->assertTrue($analyst->can('followups.create'));
+        $this->actingAs($analyst)->get(route('leads.show', $routed))->assertOk();
+    }
+
     public function test_mobile_numbers_are_stored_as_ten_digits_and_dedup_across_prefixes(): void
     {
         $ten = $this->mobile();

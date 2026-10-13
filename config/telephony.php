@@ -33,6 +33,16 @@ return [
         // Ring the agent's first leg on their `mobile` (follow-me number) or the
         // Smartflo `softphone` (extension / agent id via login-based calling).
         'dial_via'        => env('TATA_SMARTFLO_DIAL_VIA', 'mobile'),
+        // Who Smartflo dials first. `agent_first` is the ordinary click-to-call:
+        // the agent's leg rings, they answer, then the customer is dialled.
+        // `customer_first` uses the Click-to-Call Support API: the customer is
+        // dialled first and the agent's leg only rings once they have answered,
+        // so agents never sit through ringing or no-answers.
+        'call_order'      => env('TATA_SMARTFLO_CALL_ORDER', 'agent_first'),
+        // Click-to-Call Support API key (portal: API Connect → Click to Call
+        // Support). Its destination is fixed in the portal; a per-user key on
+        // the agent's profile overrides this account-wide one.
+        'c2c_support_key' => env('TATA_SMARTFLO_C2C_SUPPORT_KEY'),
         // CDR window: the API caps each request at 1 month; the profile
         // recordings view walks back this many 1-month windows.
         'cdr_months'      => (int) env('TATA_SMARTFLO_CDR_MONTHS', 3),

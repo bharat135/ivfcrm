@@ -35,6 +35,11 @@ class LeadService
                     $existing = $duplicates->first();
                     $this->patients->ensureFor($existing);
 
+                    // The same person enquiring again — often from a different
+                    // channel — is a new touch on the existing lead, tracked so
+                    // the earlier source is never overwritten.
+                    $this->recordSourceTouch($existing, $data, isFirst: false);
+
                     return $existing;
                 }
                 if ($strategy === 'merge') {
@@ -45,6 +50,8 @@ class LeadService
             $lead = $this->repo->create(array_merge($data, [
                 'lead_date' => $data['lead_date'] ?? now(),
             ]));
+
+            $this->recordSourceTouch($lead, $data, isFirst: true);
 
             if ($autoAssign && empty($lead->assigned_to)) {
                 $this->assignmentEngine->assign($lead);
@@ -189,9 +196,55 @@ class LeadService
 
         $this->patients->ensureFor($existing);
 
+        $this->recordSourceTouch($existing, $newData, isFirst: false);
+
         $this->logActivity($existing, 'system', 'Lead Merged', 'Duplicate lead merged into this record');
 
         return $existing;
+    }
+
+    /**
+     * Record one acquisition touch. Called for every enquiry — the first when a
+     * lead is created, and each later time the same person comes back — so the
+     * lead keeps its whole source/campaign journey, not just the first hit.
+     */
+    private function recordSourceTouch(Lead $lead, array $data, bool $isFirst): void
+    {
+        $channel = $data['channel'] ?? $this->resolveChannel($data);
+
+        // Skip a repeat touch that is identical to the most recent one (the same
+        // form submitted twice), so the history stays meaningful.
+        if (! $isFirst) {
+            $last = $lead->sourceTouches()->latest('occurred_at')->first();
+            if ($last
+                && $last->channel === $channel
+                && (int) $last->campaign_id === (int) ($data['campaign_id'] ?? 0)
+                && (string) $last->utm_campaign === (string) ($data['utm_campaign'] ?? '')) {
+                return;
+            }
+        }
+
+        \App\Models\LeadSourceTouch::create([
+            'lead_id'          => $lead->id,
+            'channel'          => $channel,
+            'lead_source_id'   => $data['lead_source_id'] ?? $lead->lead_source_id,
+            'campaign_id'      => $data['campaign_id'] ?? null,
+            'adset_id'         => $data['adset_id'] ?? null,
+            'ad_id'            => $data['ad_id'] ?? null,
+            'utm_source'       => $data['utm_source'] ?? null,
+            'utm_medium'       => $data['utm_medium'] ?? null,
+            'utm_campaign'     => $data['utm_campaign'] ?? null,
+            'external_lead_id' => $data['external_lead_id'] ?? null,
+            'is_first'         => $isFirst,
+            'occurred_at'      => now(),
+            'raw'              => ['source_name' => $data['source_name'] ?? null],
+        ]);
+
+        if (! $isFirst) {
+            $sourceName = $data['source_name'] ?? null;
+            $this->logActivity($lead, 'system', 'Enquired again',
+                'Re-enquiry via ' . AcquisitionChannel::label($channel) . ($sourceName ? ' (' . $sourceName . ')' : ''));
+        }
     }
 
     public function logActivity(Lead $lead, string $type, string $title, string $description = ''): void

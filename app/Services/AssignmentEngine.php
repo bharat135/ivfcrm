@@ -244,6 +244,9 @@ class AssignmentEngine
             return null;
         }
 
+        // Automatic distribution goes to telecallers only. A quality analyst
+        // receives new leads solely through a custom assignment rule that
+        // names them, or when someone assigns a lead to them by hand.
         $query = User::query()->whereHas('roles', fn ($q) => $q->where('name', 'Telecaller'));
 
         if ($exceptUserId) {
@@ -288,7 +291,7 @@ class AssignmentEngine
             ->active()
             ->available()
             ->notOnLeave($date)
-            ->whereHas('roles', fn ($q) => $q->whereIn('name', ['Telecaller', 'Counsellor']))
+            ->whereHas('roles', fn ($q) => $q->whereIn('name', ['Telecaller', 'Counsellor', 'Call Quality Analyst']))
             ->when($owner, fn ($q) => $q->where('id', '!=', $owner->id))
             ->withCount(['assignedLeads as today_count' => fn ($q) => $q->whereDate('assigned_at', today())])
             ->orderBy('today_count')

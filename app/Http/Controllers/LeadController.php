@@ -33,6 +33,7 @@ class LeadController extends Controller
             $query = $this->repo->queryForUser(Auth::user())
                 ->with(['source:id,name', 'stage:id,name,color', 'disposition:id,name,color',
                     'assignedTo:id,name', 'center:id,name,code',
+                    'campaign:id,name',
                     // The list shows the patient code alongside the name; a lead
                     // and a patient are the same person.
                     'patient:id,patient_code,journey_stage']);
@@ -41,7 +42,36 @@ class LeadController extends Controller
 
             return DataTables::of($query)
                 ->editColumn('mobile', fn (Lead $lead) => \App\Support\PhoneNumber::display($lead->mobile))
+                // "Assigned To" is rendered from the assignedTo relation. Yajra
+                // cannot map the snake_case data key back to that relation, so
+                // it emitted `assigned_to.name` as a raw column and the whole
+                // search query failed. Search and sort it explicitly.
+                ->filterColumn('assigned_to.name', function ($q, $keyword) {
+                    $q->whereHas('assignedTo', fn ($u) => $u->where('name', 'like', "%{$keyword}%"));
+                })
+                ->orderColumn('assigned_to.name', function ($q, $direction) {
+                    $q->orderBy(User::select('name')->whereColumn('users.id', 'leads.assigned_to')->limit(1), $direction);
+                })
+                // A number typed with spaces, dashes or +91 still finds the lead.
+                ->filterColumn('mobile', function ($q, $keyword) {
+                    $digits = preg_replace('/\D+/', '', $keyword);
+                    $needle = $digits !== '' ? \App\Support\PhoneNumber::indian($digits) : $keyword;
+                    $q->where('mobile', 'like', "%{$needle}%");
+                })
                 ->addColumn('origin', fn (Lead $lead) => view('leads._origin', compact('lead'))->render())
+                // Sub-source: the specific lead source name (Facebook form,
+                // Website, referral…), a level below the channel in "Came from".
+                ->addColumn('sub_source', fn (Lead $lead) => $lead->source?->name ?: ($lead->utm_source ?: '—'))
+                ->addColumn('campaign_name', fn (Lead $lead) => $lead->campaign?->name ?: '—')
+                ->editColumn('assigned_at', fn (Lead $lead) => $lead->assigned_at?->toIso8601String())
+                ->editColumn('created_at', fn (Lead $lead) => $lead->created_at?->toIso8601String())
+                ->filterColumn('sub_source', function ($q, $keyword) {
+                    $q->where(function ($w) use ($keyword) {
+                        $w->whereHas('source', fn ($s) => $s->where('name', 'like', "%{$keyword}%"))
+                          ->orWhere('utm_source', 'like', "%{$keyword}%");
+                    });
+                })
+                ->filterColumn('campaign_name', fn ($q, $keyword) => $q->whereHas('campaign', fn ($c) => $c->where('name', 'like', "%{$keyword}%")))
                 ->addColumn('action', function (Lead $lead) {
                     return view('leads._actions', compact('lead'))->render();
                 })
@@ -58,10 +88,96 @@ class LeadController extends Controller
         $sources     = LeadSource::active()->get();
         $stages      = PipelineStage::active()->get();
         $centers     = Center::active()->get();
-        $telecallers = User::active()->whereHas('roles', fn($q) => $q->whereIn('name', ['Telecaller', 'Counsellor']))->get();
+        $telecallers = User::active()->whereHas('roles', fn($q) => $q->whereIn('name', ['Telecaller', 'Counsellor', 'Call Quality Analyst']))->get();
         $channels    = AcquisitionChannel::options();
 
         return view('leads.index', compact('sources', 'stages', 'centers', 'telecallers', 'channels'));
+    }
+
+    /**
+     * Navbar quick search: find a lead by its mobile number. Returns the profile
+     * to open when found, or a signal to add a new lead (assigned to the
+     * searcher) when not. Matches on the normalised ten digits.
+     */
+    public function quickSearch(Request $request)
+    {
+        $request->validate(['mobile' => ['required', 'string', 'max:20']]);
+
+        $user   = $request->user();
+        $digits = \App\Support\PhoneNumber::indian($request->mobile);
+
+        if (! $digits || strlen($digits) < 10) {
+            return response()->json(['found' => false, 'mobile' => $request->mobile, 'message' => 'Enter a 10-digit number.']);
+        }
+
+        $lead = Lead::query()
+            ->whereNull('merged_into_id')
+            ->where(fn ($q) => $q->where('dedup_hash', \App\Support\PhoneNumber::dedupHash($digits))
+                ->orWhere('mobile', 'like', '%' . $digits)
+                ->orWhere('alt_mobile', 'like', '%' . $digits))
+            ->latest('id')
+            ->first();
+
+        if ($lead && $user->can('view', $lead)) {
+            return response()->json([
+                'found'   => true,
+                'lead'    => ['id' => $lead->id, 'name' => $lead->name ?: 'Unnamed', 'owner' => $lead->assignedTo?->name],
+                'url'     => route('leads.show', $lead),
+            ]);
+        }
+
+        // Found but not visible to this agent, or not found at all: offer to add,
+        // assigned to the searcher so it lands on their own worklist.
+        return response()->json([
+            'found'      => false,
+            'mobile'     => $digits,
+            'can_create' => $user->can('create', Lead::class),
+            'create_url' => route('leads.create', ['mobile' => $digits]),
+        ]);
+    }
+
+    /**
+     * Navbar assigned-leads tray. An admin sees every new lead across the
+     * telecallers and quality analysts, tagged with its owner; an owner sees
+     * only their own. "New" means assigned but not yet called, so a lead drops
+     * off the tray the moment its first call is logged.
+     */
+    public function assignedTray(Request $request)
+    {
+        $user    = $request->user();
+        $isAdmin = $user->hasRole(['Super Admin', 'Admin', 'Management', 'Center Manager']);
+
+        $query = Lead::query()
+            ->whereNull('merged_into_id')
+            ->where('status', 'new')
+            ->where('contact_attempts', 0)
+            ->whereNull('first_contacted_at')
+            ->whereNotNull('assigned_to')
+            ->with('assignedTo:id,name')
+            ->latest('assigned_at');
+
+        if ($isAdmin) {
+            // Only leads owned by the calling roles, so the tray reflects the
+            // people who work leads, not every user.
+            $query->whereHas('assignedTo.roles', fn ($r) => $r->whereIn('name', ['Telecaller', 'Counsellor', 'Call Quality Analyst']));
+            if ($user->hasRole('Center Manager') && $user->center_id) {
+                $query->where('center_id', $user->center_id);
+            }
+        } else {
+            $query->where('assigned_to', $user->id);
+        }
+
+        $count = (clone $query)->count();
+
+        $leads = $query->limit(15)->get()->map(fn (Lead $lead) => [
+            'id'    => $lead->id,
+            'name'  => $lead->name ?: 'Unnamed lead',
+            'owner' => $isAdmin ? $lead->assignedTo?->name : null,
+            'when'  => $lead->assigned_at?->diffForHumans(),
+            'url'   => route('leads.show', $lead),
+        ]);
+
+        return response()->json(['count' => $count, 'is_admin' => $isAdmin, 'leads' => $leads]);
     }
 
     /**
@@ -98,7 +214,7 @@ class LeadController extends Controller
     {
         $sources     = LeadSource::active()->get();
         $centers     = Center::active()->get();
-        $telecallers = User::active()->whereHas('roles', fn($q) => $q->whereIn('name', ['Telecaller', 'Counsellor']))->get();
+        $telecallers = User::active()->whereHas('roles', fn($q) => $q->whereIn('name', ['Telecaller', 'Counsellor', 'Call Quality Analyst']))->get();
         $stages      = PipelineStage::active()->get();
 
         return view('leads.create', compact('sources', 'centers', 'telecallers', 'stages'));
@@ -142,7 +258,7 @@ class LeadController extends Controller
 
     private function isFrontLine(User $user): bool
     {
-        return $user->hasRole(['Telecaller', 'Counsellor', 'Receptionist']);
+        return $user->hasRole(['Telecaller', 'Counsellor', 'Receptionist', 'Call Quality Analyst']);
     }
 
     /**
@@ -252,7 +368,7 @@ class LeadController extends Controller
         $this->authorize('update', $lead);
         $sources  = LeadSource::active()->get();
         $centers  = Center::active()->get();
-        $telecallers = User::active()->whereHas('roles', fn($q) => $q->whereIn('name', ['Telecaller', 'Counsellor']))->get();
+        $telecallers = User::active()->whereHas('roles', fn($q) => $q->whereIn('name', ['Telecaller', 'Counsellor', 'Call Quality Analyst']))->get();
 
         return view('leads.edit', compact('lead', 'sources', 'centers', 'telecallers'));
     }
@@ -327,17 +443,22 @@ class LeadController extends Controller
             ], syncLead: false);
         }
 
+        // In a bulk-calling run the outcome moves the queue on and the next
+        // lead is dialled; otherwise the usual "next lead" pick applies.
+        $nextUrl = \App\Models\DialSession::advanceAfter($request->user(), $lead)
+            ?? route('leads.next', ['after' => $lead->id]);
+
         // expectsJson() covers both jQuery (X-Requested-With) and API clients
         // that only send an Accept header.
         if ($request->expectsJson()) {
             return response()->json([
                 'success'  => true,
                 'message'  => 'Disposition updated.',
-                'next_url' => route('leads.next', ['after' => $lead->id]),
+                'next_url' => $nextUrl,
             ]);
         }
 
-        return redirect()->route('leads.next', ['after' => $lead->id])->with('success', 'Disposition updated.');
+        return redirect($nextUrl)->with('success', 'Disposition updated.');
     }
 
     public function reassign(Request $request, Lead $lead)

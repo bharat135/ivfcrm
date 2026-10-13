@@ -30,7 +30,7 @@ class AppointmentController extends Controller
         }
 
         $centers = Center::active()->get();
-        $doctors = Doctor::active()->get();
+        $doctors = Doctor::active()->with('center:id,name')->orderBy('name')->get();
 
         return view('appointments.index', compact('centers', 'doctors'));
     }

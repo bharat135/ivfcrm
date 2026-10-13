@@ -85,6 +85,29 @@
                         </div>
                         <div class="form-text">Softphone rings the agent's Smartflo extension (login-based calling) instead of their mobile.</div>
                     </div>
+                    @php $callOrder = $telephony['tata_call_order'] ?? 'agent_first'; @endphp
+                    <div class="mt-3">
+                        <label class="form-label d-block">Who is dialled first</label>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="tata_call_order" id="coAgent" value="agent_first" @checked($callOrder !== 'customer_first')>
+                            <label class="btn btn-outline-secondary btn-sm" for="coAgent"><i class="bi bi-headset me-1"></i>Agent first</label>
+                            <input type="radio" class="btn-check" name="tata_call_order" id="coCustomer" value="customer_first" @checked($callOrder === 'customer_first')>
+                            <label class="btn btn-outline-secondary btn-sm" for="coCustomer"><i class="bi bi-person-check me-1"></i>Customer first</label>
+                        </div>
+                        <div class="form-text">
+                            <strong>Agent first</strong> is Smartflo's ordinary click-to-call: the agent's phone rings, they pick up, then the customer is dialled.
+                            <strong>Customer first</strong> dials the customer straight away and only rings the agent once the customer has answered, so nobody waits through ringing or no-answers.
+                            To skip the pick-up entirely, turn on <em>Auto Answer</em> under Preferences → Permissions in the Smartflo softphone app.
+                        </div>
+                    </div>
+                    <div class="mt-2" id="c2cSupportKeyWrap">
+                        <label class="form-label">Click-to-Call Support API key <span class="text-muted fw-normal">(customer first)</span></label>
+                        <input type="text" name="tata_c2c_support_key" class="form-control font-monospace" value="{{ $telephony['tata_c2c_support_key'] ?? '' }}" placeholder="From Smartflo → API Connect → Click to Call Support" autocomplete="off">
+                        <div class="form-text">
+                            Create it in the Smartflo portal with the destination set to the agent, department or IVR that should ring after the customer answers.
+                            A key saved on an agent's profile (Settings → Users) overrides this account-wide one, so each agent can be their own destination.
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

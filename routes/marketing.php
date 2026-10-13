@@ -201,6 +201,15 @@ Route::prefix('settings/integrations')->name('settings.integrations.')
         Route::put('/accounts/{account}', [IntegrationController::class, 'updateAccount'])->middleware('can:integrations.edit')->name('accounts.update');
         Route::delete('/accounts/{account}', [IntegrationController::class, 'destroyAccount'])->middleware('can:integrations.delete')->name('accounts.destroy');
 
+        // Third-party WhatsApp API (1automations), alongside the Meta setup.
+        Route::prefix('whatsapp-provider')->name('provider.')->group(function () {
+            Route::put('/', [\App\Http\Controllers\Settings\ThirdPartyWhatsAppController::class, 'save'])->middleware('can:integrations.edit')->name('save');
+            Route::post('/test', [\App\Http\Controllers\Settings\ThirdPartyWhatsAppController::class, 'test'])->name('test');
+            Route::post('/webhook', [\App\Http\Controllers\Settings\ThirdPartyWhatsAppController::class, 'registerWebhook'])->middleware('can:integrations.edit')->name('webhook');
+            Route::get('/webhooks', [\App\Http\Controllers\Settings\ThirdPartyWhatsAppController::class, 'listWebhooks'])->name('webhooks');
+            Route::post('/templates', [\App\Http\Controllers\Settings\ThirdPartyWhatsAppController::class, 'syncTemplates'])->middleware('can:integrations.edit')->name('templates');
+        });
+
         // Google Ads sits under the same permission as Meta: it is the other
         // half of the same paid-acquisition loop.
         Route::prefix('google-ads')->name('google.')->group(function () {

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\ChannelAccount;
 use App\Services\Meta\MetaClient;
 use App\Services\Meta\MetaSyncService;
 use Illuminate\Bus\Queueable;
@@ -64,6 +65,20 @@ class SyncMetaAccountJob implements ShouldQueue
 
         if (in_array('templates', $this->parts, true) && $client->wabaId()) {
             $result['templates'] = $this->guard('templates', fn () => $sync->syncTemplates());
+        }
+
+        // Numbers with their own WABA (another business or Meta app) keep
+        // their own template library; pull each so the picker offers them.
+        if (in_array('templates', $this->parts, true)) {
+            $accounts = ChannelAccount::where('channel', 'whatsapp')->where('is_active', true)->get()
+                ->filter(fn (ChannelAccount $a) => ! empty($a->credentials['waba_id']));
+
+            foreach ($accounts as $account) {
+                $result['templates:' . $account->id] = $this->guard(
+                    'templates for ' . $account->name,
+                    fn () => $sync->syncTemplates($account),
+                );
+            }
         }
 
         // The settings screen reads this to show "last synced" without a table.

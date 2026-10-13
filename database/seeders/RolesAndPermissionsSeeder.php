@@ -112,9 +112,15 @@ class RolesAndPermissionsSeeder extends Seeder
                 'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
                 'view_own_leads',
             ],
+            // Everything a Telecaller has, plus the audit extras of the role.
             'Call Quality Analyst' => [
-                'call_logs.view', 'call_logs.export', 'leads.view', 'reports.view',
-                'telephony.view',
+                'leaves.view',
+                'leads.view', 'leads.create', 'leads.edit', 'followups.*', 'call_logs.*',
+                'appointments.view', 'appointments.create',
+                'conversations.view', 'conversations.create', 'conversations.edit',
+                'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
+                'view_own_leads',
+                'reports.view', 'telephony.view',
             ],
             'Receptionist' => [
                 'leaves.view', 'view_mobile_numbers',

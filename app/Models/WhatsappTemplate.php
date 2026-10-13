@@ -29,6 +29,24 @@ class WhatsappTemplate extends Model
         return $query->where('status', 'APPROVED');
     }
 
+    /**
+     * Templates belonging to the active default WhatsApp sender. A template
+     * only exists in the WABA it was created in, so offering another
+     * account's template would fail at send time. With no default account,
+     * the templates synced from Settings → Integrations (no account) apply.
+     */
+    public function scopeForDefaultSender($query)
+    {
+        $default = ChannelAccount::where('channel', 'whatsapp')
+            ->where('is_active', true)
+            ->where('is_default', true)
+            ->first();
+
+        return $default
+            ? $query->where('channel_account_id', $default->id)
+            : $query->whereNull('channel_account_id');
+    }
+
     public function isApproved(): bool
     {
         return $this->status === 'APPROVED';

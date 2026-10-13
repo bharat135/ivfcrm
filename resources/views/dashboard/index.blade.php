@@ -134,7 +134,8 @@ $('#recentLeadsTable').DataTable({
         { data: 'mobile' },
         { data: 'source.name', defaultContent: '—' },
         { data: 'stage_badge', orderable: false },
-        { data: 'assigned_to.name', defaultContent: 'Unassigned' },
+        // Rendered from a relation; not a real column, so it cannot be sorted or searched server-side.
+        { data: 'assigned_to.name', defaultContent: 'Unassigned', orderable: false, searchable: false },
         { data: 'created_at', render: d => FUI.date(d) },
         { data: 'action', orderable: false, searchable: false },
     ],

@@ -340,6 +340,145 @@
     </div>
 </div>
 
+{{-- ================================================================ --}}
+{{-- Third-party WhatsApp API (1automations)                            --}}
+{{-- ================================================================ --}}
+@php
+    $pcr = $provider?->credentials ?? [];
+    $providerLive = $provider && $provider->is_active && $provider->is_default;
+@endphp
+<div class="card shadow-sm mt-4" id="providerSection">
+    <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
+        <i class="bi bi-whatsapp text-success fs-5"></i>
+        <div class="flex-grow-1">
+            <div class="fw-semibold">Third-party WhatsApp API <span class="text-muted fw-normal">(1automations)</span></div>
+            <small class="text-muted">A separate sending route. The Meta setup above is kept as it is; whichever account is the active default sender is used.</small>
+        </div>
+        @if($provider)
+            <span class="badge {{ $providerLive ? 'bg-success' : 'bg-secondary' }}">
+                {{ $providerLive ? 'Active default sender' : ($provider->is_active ? 'Saved · not default' : 'Inactive') }}
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="btnProviderTest"><i class="bi bi-plug me-1"></i>Test</button>
+        @endif
+    </div>
+
+    <form id="providerForm">
+        @csrf
+        @method('PUT')
+        <div class="card-body">
+            <div id="providerResults" class="mb-3"></div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Display name <span class="text-danger">*</span></label>
+                    <input type="text" name="name" class="form-control" required value="{{ $provider->name ?? 'Prevoir IVF (1automations)' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Display phone number</label>
+                    <input type="text" name="identifier" class="form-control" placeholder="+91 86575 51595" value="{{ $provider->identifier ?? '' }}">
+                </div>
+
+                <div class="col-md-8">
+                    <label class="form-label">Access key <span class="text-danger">*</span></label>
+                    <input type="password" name="access_token" class="form-control font-monospace" autocomplete="new-password"
+                           placeholder="{{ ! empty($pcr['access_token']) ? 'Saved — leave blank to keep' : 'Paste the access key / token' }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">API version</label>
+                    <input type="text" name="api_version" class="form-control" placeholder="v21.0" value="{{ $pcr['api_version'] ?? '' }}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">App URL <span class="text-danger">*</span></label>
+                    <input type="url" name="app_url" class="form-control" required placeholder="https://…" value="{{ $pcr['app_url'] ?? '' }}">
+                    <div class="form-text">The provider's <code>domain</code>. Messages go to <code>{App URL}/api/meta/{version}/{phone number id}/messages</code>.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Phone Number ID <span class="text-danger">*</span></label>
+                    <input type="text" name="phone_number_id" class="form-control" required value="{{ $pcr['phone_number_id'] ?? '' }}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">WABA ID</label>
+                    <input type="text" name="waba_id" class="form-control" value="{{ $pcr['waba_id'] ?? '' }}">
+                    <div class="form-text">Needed for template sync.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Business ID</label>
+                    <input type="text" name="business_id" class="form-control" value="{{ $pcr['business_id'] ?? '' }}">
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">Webhook API URL <span class="text-muted fw-normal">(optional)</span></label>
+                    <input type="url" name="webhook_api_url" class="form-control" placeholder="Leave blank to use the App URL" value="{{ $pcr['webhook_api_url'] ?? '' }}">
+                    <div class="form-text">The provider's <code>base-url</code> used for <code>/v2/webhook</code>, if it differs from the App URL.</div>
+                </div>
+
+                <div class="col-12 d-flex flex-wrap gap-4">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="providerActive" @checked($provider?->is_active ?? true)>
+                        <label class="form-check-label" for="providerActive">Active</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="providerDefault" @checked($provider?->is_default ?? true)>
+                        <label class="form-check-label" for="providerDefault">Use as the default WhatsApp sender</label>
+                    </div>
+                </div>
+            </div>
+
+            <hr>
+
+            <h6 class="fw-semibold mb-2"><i class="bi bi-broadcast me-1"></i>Webhook — incoming messages &amp; delivery status</h6>
+            @if($providerWebhookUrl)
+                <div class="input-group mb-2">
+                    <input type="text" class="form-control font-monospace small" id="providerWebhookUrl" value="{{ $providerWebhookUrl }}" readonly>
+                    <button type="button" class="btn btn-outline-secondary" id="btnCopyProviderUrl" title="Copy"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <div class="form-text mb-2">
+                    Click <strong>Register webhook</strong> to create it on the provider automatically, or paste this URL in the provider's dashboard.
+                    The link contains a secret — do not share it.
+                    @if(! empty($pcr['webhook_id']))
+                        <br>Registered with the provider · webhook id <code>{{ $pcr['webhook_id'] }}</code>
+                    @endif
+                </div>
+                @can('integrations.edit')
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-success" id="btnProviderWebhook"><i class="bi bi-link-45deg me-1"></i>Register webhook</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnProviderWebhooks"><i class="bi bi-list-ul me-1"></i>Show provider webhooks</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnProviderTemplates"><i class="bi bi-arrow-repeat me-1"></i>Sync templates</button>
+                    </div>
+                @endcan
+                <pre class="small bg-light border rounded p-2 mt-2 d-none" id="providerWebhookList" style="max-height:220px;overflow:auto"></pre>
+            @else
+                <p class="small text-muted mb-0">Save the settings first — the CRM then generates the webhook URL for this account.</p>
+            @endif
+
+            @if($providerEvents->isNotEmpty())
+                <div class="mt-3">
+                    <div class="small fw-semibold text-muted mb-1">Recent events from the provider</div>
+                    <div class="list-group list-group-flush border rounded" style="max-height:200px;overflow-y:auto">
+                        @foreach($providerEvents as $event)
+                            <div class="list-group-item py-1 d-flex justify-content-between align-items-center small">
+                                <span class="font-monospace">{{ $event->event_type ?: 'unknown' }}</span>
+                                <span>
+                                    <span class="badge bg-{{ match($event->status) { 'processed' => 'success', 'failed' => 'danger', 'ignored' => 'secondary', default => 'info' } }}">{{ $event->status }}</span>
+                                    <span class="text-muted ms-1">{{ $event->created_at->diffForHumans() }}</span>
+                                </span>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        </div>
+
+        @can('integrations.edit')
+            <div class="card-footer bg-white text-end">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Save third-party API</button>
+            </div>
+        @endcan
+    </form>
+</div>
+
 {{-- Channel account modal --}}
 <div class="modal fade" id="accountModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -370,6 +509,7 @@
                             <label class="form-label">Provider</label>
                             <select name="provider" class="form-select">
                                 <option value="meta">Meta Cloud API</option>
+                                <option value="1automations">1automations (third-party)</option>
                                 <option value="wati">Wati</option>
                                 <option value="msg91">MSG91</option>
                             </select>
@@ -408,6 +548,30 @@
                     <div class="mb-3">
                         <label class="form-label small">Access token override</label>
                         <input type="password" name="access_token" class="form-control form-control-sm" autocomplete="new-password">
+                        <div class="form-text d-none" id="accTokenHint">A token is saved. Leave blank to keep it.</div>
+                    </div>
+
+                    <p class="small text-muted mb-2">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Number from a <strong>different Meta app</strong> (another developer or business account)?
+                        Also enter that app's ID and secret, and in that app's dashboard point the WhatsApp webhook to the
+                        same callback URL and verify token shown above.
+                    </p>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-5">
+                            <label class="form-label small">App ID override</label>
+                            <input type="text" name="app_id" class="form-control form-control-sm" inputmode="numeric">
+                        </div>
+                        <div class="col-7">
+                            <label class="form-label small">App Secret override</label>
+                            <input type="password" name="app_secret" class="form-control form-control-sm" autocomplete="new-password">
+                            <div class="form-text d-none" id="accSecretHint">
+                                A secret is saved. Leave blank to keep it, or
+                                <a href="#" id="accClearApp">switch back to the shared app</a>.
+                            </div>
+                            <input type="hidden" name="clear_app" value="0">
+                        </div>
                     </div>
 
                     <div class="form-check form-switch">
@@ -451,6 +615,68 @@ $(function () {
         .always(() => $btn.prop('disabled', false));
     });
 
+    // --- Third-party WhatsApp API (1automations) ----------------------------
+    function providerRows(results) {
+        return Object.entries(results).map(([key, r]) => `
+            <div class="d-flex align-items-start gap-2 py-1">
+                <i class="bi ${!r.ok ? 'bi-x-circle-fill text-danger' : (r.warn ? 'bi-exclamation-circle-fill text-warning' : 'bi-check-circle-fill text-success')}"></i>
+                <div><strong class="text-capitalize">${key.replace('_', ' ')}:</strong> ${$('<div>').text(r.message).html()}</div>
+            </div>`).join('');
+    }
+
+    $('#providerForm').on('submit', function (e) {
+        e.preventDefault();
+        const $btn = $(this).find('[type=submit]').prop('disabled', true);
+        const data = $(this).serialize()
+            + '&is_active=' + ($('#providerActive').is(':checked') ? 1 : 0)
+            + '&is_default=' + ($('#providerDefault').is(':checked') ? 1 : 0);
+
+        $.post(@json(route('settings.integrations.provider.save')), data)
+            .done(res => { toastr.success(res.message); setTimeout(() => location.reload(), 900); })
+            .fail(xhr => {
+                const errors = xhr.responseJSON?.errors;
+                toastr.error(errors ? Object.values(errors).flat().join('<br>') : (xhr.responseJSON?.message || 'Could not save.'));
+            })
+            .always(() => $btn.prop('disabled', false));
+    });
+
+    $('#btnProviderTest').on('click', function () {
+        const $btn = $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Testing…');
+        $('#providerResults').html('');
+
+        $.post(@json(route('settings.integrations.provider.test')))
+            .done(res => $('#providerResults').html(`<div class="border rounded px-3 py-2">${providerRows(res.results)}</div>`))
+            .fail(xhr => toastr.error(xhr.responseJSON?.message || 'Test failed.'))
+            .always(() => $btn.prop('disabled', false).html('<i class="bi bi-plug me-1"></i>Test'));
+    });
+
+    $('#btnProviderWebhook').on('click', function () {
+        const $btn = $(this).prop('disabled', true);
+        $.post(@json(route('settings.integrations.provider.webhook')))
+            .done(res => { toastr.success(res.message); setTimeout(() => location.reload(), 1200); })
+            .fail(xhr => toastr.error(xhr.responseJSON?.message || 'Could not register the webhook.'))
+            .always(() => $btn.prop('disabled', false));
+    });
+
+    $('#btnProviderWebhooks').on('click', function () {
+        $.get(@json(route('settings.integrations.provider.webhooks')))
+            .done(res => $('#providerWebhookList').removeClass('d-none').text(JSON.stringify(res.webhooks, null, 2)))
+            .fail(xhr => toastr.error(xhr.responseJSON?.message || 'Could not load webhooks.'));
+    });
+
+    $('#btnProviderTemplates').on('click', function () {
+        const $btn = $(this).prop('disabled', true);
+        $.post(@json(route('settings.integrations.provider.templates')))
+            .done(res => toastr.success(res.message))
+            .fail(xhr => toastr.error(xhr.responseJSON?.message || 'Template sync failed.'))
+            .always(() => $btn.prop('disabled', false));
+    });
+
+    $('#btnCopyProviderUrl').on('click', function () {
+        navigator.clipboard?.writeText($('#providerWebhookUrl').val());
+        toastr.success('Webhook URL copied.');
+    });
+
     // --- Test connection --------------------------------------------------
     $('#btnTest').on('click', function () {
         const $btn = $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Testing…');
@@ -460,7 +686,7 @@ $(function () {
             .done(res => {
                 const rows = Object.entries(res.results).map(([key, r]) => `
                     <div class="d-flex align-items-start gap-2 py-1">
-                        <i class="bi ${r.ok ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger'}"></i>
+                        <i class="bi ${!r.ok ? 'bi-x-circle-fill text-danger' : (r.warn ? 'bi-exclamation-circle-fill text-warning' : 'bi-check-circle-fill text-success')}"></i>
                         <div><strong class="text-capitalize">${key.replace('_', ' ')}:</strong> ${$('<div>').text(r.message).html()}</div>
                     </div>`).join('');
 
@@ -556,6 +782,7 @@ $(function () {
     $('#btnAddAccount').on('click', function () {
         $('#accountForm')[0].reset();
         $('#accountId').val('');
+        $('#accTokenHint, #accSecretHint').addClass('d-none');
         $('#accountModalTitle').text('Add channel account');
         new bootstrap.Modal('#accountModal').show();
     });
@@ -574,11 +801,23 @@ $(function () {
             $form.find('[name=identifier]').val(a.identifier || '');
             $form.find('[name=phone_number_id]').val(a.phone_number_id || '');
             $form.find('[name=waba_id]').val(a.waba_id || '');
+            $form.find('[name=app_id]').val(a.app_id || '');
+            $form.find('[name=clear_app]').val('0');
+            $('#accTokenHint').toggleClass('d-none', !a.has_access_token);
+            $('#accSecretHint').toggleClass('d-none', !a.has_app_secret);
             $form.find('[name=is_default]').prop('checked', a.is_default);
             $form.find('[name=is_active]').prop('checked', a.is_active);
             $('#accountModalTitle').text('Edit channel account');
             new bootstrap.Modal('#accountModal').show();
         });
+    });
+
+    $('#accClearApp').on('click', function (e) {
+        e.preventDefault();
+        $('#accountForm [name=clear_app]').val('1');
+        $('#accountForm [name=app_id]').val('');
+        $('#accSecretHint').addClass('d-none');
+        toastr.info('The app override will be removed when you save.');
     });
 
     $('#accountForm').on('submit', function (e) {

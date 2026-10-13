@@ -28,7 +28,25 @@ class MetaWebhookProcessor
         private ClickToWhatsAppAttributor $ctwa,
     ) {}
 
-    public function handle(array $payload): void
+    /**
+     * Set while handling a webhook that arrived on an account-specific URL
+     * (the third-party API), so its messages are attributed to that account
+     * even when another account shares the same phone number id.
+     */
+    private ?ChannelAccount $forcedAccount = null;
+
+    public function handle(array $payload, ?ChannelAccount $account = null): void
+    {
+        $this->forcedAccount = $account;
+
+        try {
+            $this->handlePayload($payload);
+        } finally {
+            $this->forcedAccount = null;
+        }
+    }
+
+    private function handlePayload(array $payload): void
     {
         $object = $payload['object'] ?? null;
 
@@ -233,11 +251,20 @@ class MetaWebhookProcessor
 
     private function resolveAccount(?string $phoneNumberId): ?ChannelAccount
     {
+        if ($this->forcedAccount) {
+            return $this->forcedAccount;
+        }
+
         if (! $phoneNumberId) {
             return $this->conversations->defaultAccount('whatsapp');
         }
 
+        // Active accounts first, the default sender before others, so two
+        // accounts sharing a number (Meta + third-party) resolve predictably.
         $account = ChannelAccount::where('channel', 'whatsapp')
+            ->orderByDesc('is_active')
+            ->orderByDesc('is_default')
+            ->orderBy('id')
             ->get()
             ->first(fn (ChannelAccount $a) => ($a->credentials['phone_number_id'] ?? null) === $phoneNumberId);
 

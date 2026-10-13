@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ChannelAccount;
 use App\Services\Meta\MetaClient;
 use App\Services\Meta\MetaWebhookProcessor;
 use Illuminate\Http\JsonResponse;
@@ -52,19 +53,38 @@ class MetaWebhookController extends Controller
     }
 
     /**
+     * Each Meta app signs with its own secret. Besides the app under
+     * Settings → Integrations, a channel account may belong to a different
+     * app (another developer account) and carry its own secret, so the body
+     * is accepted when it matches any configured one.
+     */
+    private function signatureValid(?string $header, string $raw): bool
+    {
+        $secrets = ChannelAccount::where('is_active', true)
+            ->get()
+            ->map(fn (ChannelAccount $account) => $account->credentials['app_secret'] ?? null)
+            ->toBase()
+            ->prepend($this->client->credential('app_secret'))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($secrets->isEmpty()) {
+            // Nothing configured yet — allow, the setup screen warns about it.
+            return MetaWebhookProcessor::verifySignature($header, $raw, null);
+        }
+
+        return $secrets->contains(fn (string $secret) => MetaWebhookProcessor::verifySignature($header, $raw, $secret));
+    }
+
+    /**
      * POST — the event batch.
      */
     public function handle(Request $request): JsonResponse
     {
         $raw = $request->getContent();
 
-        $signatureValid = MetaWebhookProcessor::verifySignature(
-            $request->header('X-Hub-Signature-256'),
-            $raw,
-            $this->client->credential('app_secret'),
-        );
-
-        if (! $signatureValid) {
+        if (! $this->signatureValid($request->header('X-Hub-Signature-256'), $raw)) {
             Log::warning('Meta webhook signature mismatch', ['ip' => $request->ip()]);
 
             // 403 tells Meta the delivery was rejected; do not process the body.

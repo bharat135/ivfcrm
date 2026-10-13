@@ -17,7 +17,9 @@
 
                     <div class="mb-3">
                         <label class="form-label">Mobile number <span class="text-danger">*</span></label>
-                        <input type="tel" name="mobile" class="form-control" required placeholder="9812345678">
+                        <input type="tel" name="mobile" class="form-control" required placeholder="10-digit mobile"
+                               data-mobile10 inputmode="numeric" maxlength="10" pattern="[6-9][0-9]{9}"
+                               title="10-digit Indian mobile number, without +91 or 0">
                         <div class="form-text">
                             The contact must have messaged you in the last 24 hours — a flow is an
                             interactive message, so it obeys the same window.

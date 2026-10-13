@@ -32,6 +32,15 @@
     <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
         <span class="fw-semibold me-auto"><i class="bi bi-file-earmark-text me-2"></i>Template library</span>
 
+        {{-- Templates live in one WABA each, so the library is shown per
+             provider; Sync and New template act on the one selected here. --}}
+        <select class="form-select form-select-sm w-auto" id="fSource" title="Provider / WhatsApp account">
+            @foreach($sources as $value => $label)
+                <option value="{{ $value }}" @selected($value === $selectedSource)>{{ $label }}</option>
+            @endforeach
+            <option value="">All providers</option>
+        </select>
+
         <select class="form-select form-select-sm w-auto" id="fStatus">
             <option value="">All statuses</option>
             <option value="APPROVED">Approved</option>
@@ -59,6 +68,7 @@
                 <thead class="table-light">
                     <tr>
                         <th>Name</th>
+                        <th>Provider</th>
                         <th>Language</th>
                         <th>Category</th>
                         <th>Status</th>
@@ -78,7 +88,10 @@
         <div class="modal-content">
             <form id="templateForm">
                 <div class="modal-header">
-                    <h5 class="modal-title">Create a WhatsApp template</h5>
+                    <h5 class="modal-title">
+                        Create a WhatsApp template
+                        <div class="small text-muted fw-normal">Submitted to: <span id="templateTarget">—</span></div>
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
 
@@ -220,12 +233,14 @@ $(function () {
         ajax: {
             url: @json(route('marketing.templates.index')),
             data: d => {
+                d.source   = $('#fSource').val();
                 d.status   = $('#fStatus').val();
                 d.category = $('#fCategory').val();
             },
         },
         columns: [
             { data: 'name' },
+            { data: 'provider', orderable: false, searchable: false },
             { data: 'language' },
             { data: 'category' },
             { data: 'status_badge', orderable: false },
@@ -235,12 +250,24 @@ $(function () {
         ],
     });
 
-    $('#fStatus, #fCategory').on('change', () => table.ajax.reload());
+    $('#fSource, #fStatus, #fCategory').on('change', () => table.ajax.reload());
+
+    // The account Sync / New template act on: the selected provider, or the
+    // default one when "All providers" is selected.
+    const defaultSource = @json($selectedSource);
+    function targetAccount() {
+        const v = $('#fSource').val() || defaultSource;
+        return /^\d+$/.test(v) ? v : '';
+    }
+    function targetLabel() {
+        const v = $('#fSource').val() || defaultSource;
+        return $('#fSource option').filter((i, o) => o.value === v).text() || 'Meta Cloud API';
+    }
 
     $('#btnSync').on('click', function () {
         const $btn = $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Syncing…');
 
-        $.post(@json(route('marketing.templates.sync')))
+        $.post(@json(route('marketing.templates.sync')), { channel_account_id: targetAccount() })
             .done(res => { toastr.success(res.message); table.ajax.reload(); })
             .fail(xhr => toastr.error(xhr.responseJSON?.message || 'Sync failed.'))
             .always(() => $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat me-1"></i>Sync'));
@@ -250,6 +277,7 @@ $(function () {
         $('#templateForm')[0].reset();
         $('#buttonsWrap, #exampleInputs').empty();
         $('#exampleWrap').addClass('d-none');
+        $('#templateTarget').text(targetLabel());
         updatePreview();
         new bootstrap.Modal('#templateModal').show();
     });
@@ -362,7 +390,7 @@ $(function () {
 
         const $btn = $(this).find('[type=submit]').prop('disabled', true);
 
-        $.post(@json(route('marketing.templates.store')), $(this).serialize())
+        $.post(@json(route('marketing.templates.store')), $(this).serialize() + '&channel_account_id=' + targetAccount())
             .done(res => {
                 if (!res.success) return toastr.error(res.message);
                 toastr.success(res.message);

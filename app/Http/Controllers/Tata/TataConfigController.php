@@ -60,6 +60,8 @@ class TataConfigController extends Controller
             'tata_webhook_token'     => ['nullable', 'string', 'max:255'],
             'tata_call_timeout'      => ['nullable', 'integer', 'min:0', 'max:7200'],
             'tata_dial_via'          => ['nullable', Rule::in(['mobile', 'softphone'])],
+            'tata_call_order'        => ['nullable', Rule::in(['agent_first', 'customer_first'])],
+            'tata_c2c_support_key'   => ['nullable', 'string', 'max:255'],
             'force_disposition'      => ['nullable', 'boolean'],
             'transcription_enabled'  => ['nullable', 'boolean'],
             'transcription_language' => ['nullable', 'string', 'max:12', 'regex:/^[a-z]{2,3}(-[A-Za-z]{2,4})?$/'],

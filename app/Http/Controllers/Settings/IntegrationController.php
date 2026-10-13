@@ -43,6 +43,11 @@ class IntegrationController extends Controller
             'accounts'     => ChannelAccount::with('center')->orderBy('channel')->get(),
             'centers'      => Center::where('is_active', true)->orderBy('name')->get(),
             'webhookUrl'   => url('/api/webhooks/meta'),
+            'provider'     => $provider = ChannelAccount::thirdPartyWhatsApp(),
+            'providerWebhookUrl' => $provider && ! empty($provider->credentials['webhook_token'])
+                ? ThirdPartyWhatsAppController::callbackUrl($provider)
+                : null,
+            'providerEvents' => WebhookEvent::where('source', ChannelAccount::PROVIDER_ONEAUTOMATIONS)->latest()->limit(10)->get(),
             'lastSync'     => Cache::get('meta.last_sync'),
             'recentEvents' => WebhookEvent::where('source', 'meta')->latest()->limit(15)->get(),
             'status'       => [
@@ -128,12 +133,24 @@ class IntegrationController extends Controller
                     throw new MetaException('No Page access token saved — click "Discover" on the Ads tab so Lead Ads submissions can be read.');
                 }
 
-                if (! $this->ads->isPageSubscribedToLeadgen()) {
+                try {
+                    $subscribed = $this->ads->isPageSubscribedToLeadgen();
+                } catch (MetaException $e) {
+                    // Even reading the subscription needs pages_manage_metadata,
+                    // so explain the token rather than echo Meta's bare error.
+                    throw new MetaException($this->pageMetadataHint($e));
+                }
+
+                if (! $subscribed) {
                     throw new MetaException('Page is not subscribed to leadgen, so Lead Ads submissions never reach the webhook. Click "Subscribe Page to Lead Ads" on the Ads tab.');
                 }
 
                 return 'Page is subscribed to leadgen — new Lead Ads submissions reach the webhook.';
             });
+        }
+
+        if ($this->client->wabaId() || $this->client->phoneNumberId()) {
+            $results['scopes'] = $this->probe(fn () => $this->tokenScopeStatus());
         }
 
         if ($this->client->wabaId()) {
@@ -152,8 +169,34 @@ class IntegrationController extends Controller
         }
 
         if ($this->client->phoneNumberId()) {
+            $results['phone_number'] = $this->probe(fn () => $this->phoneNumberStatus(
+                $this->client->phoneNumberId(),
+                null,
+                'Settings → Integrations → WhatsApp → Phone Number ID',
+            ));
+        }
+
+        $senders = ChannelAccount::where('channel', 'whatsapp')->where('is_active', true)->get();
+
+        if ($senders->isNotEmpty()) {
+            $results['senders'] = $this->probe(fn () => $this->senderStatus($senders));
+        }
+
+        if ($this->client->phoneNumberId()) {
             $results['webhook'] = $this->probe(function () {
-                $apps = $this->whatsapp->subscribedApps();
+                try {
+                    $apps = $this->whatsapp->subscribedApps();
+                } catch (MetaException $e) {
+                    if (! $e->isTransient()) {
+                        throw $e;
+                    }
+
+                    // Meta's GET {waba}/subscribed_apps hangs ~30s and returns
+                    // "(#1) An unknown error occurred" for some WABAs even when
+                    // the subscription is fine (the POST succeeds). The app's
+                    // own webhook configuration is the next best truth.
+                    return $this->webhookStatusFromApp($e);
+                }
 
                 return $apps
                     ? 'Webhook subscription active (' . count($apps) . ' app).'
@@ -171,15 +214,225 @@ class IntegrationController extends Controller
         return response()->json(['success' => true, 'results' => $results]);
     }
 
+    /**
+     * The callback returns a message (ok) or a ready-made result row, which
+     * lets a check report "working, with a caveat" as a warning.
+     */
     private function probe(callable $callback): array
     {
         try {
-            return ['ok' => true, 'message' => $callback()];
+            $result = $callback();
+
+            return is_array($result) ? $result : ['ok' => true, 'message' => $result];
         } catch (MetaException $e) {
             return ['ok' => false, 'message' => $e->displayMessage()];
         } catch (\Throwable $e) {
             return ['ok' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Sending needs whatsapp_business_messaging; reading the WABA (numbers,
+     * templates, webhook) needs whatsapp_business_management. A token minted
+     * before those permissions were added to the app lacks them silently —
+     * Graph then answers every send with "Object with ID … does not exist".
+     */
+    private function tokenScopeStatus(): array
+    {
+        $info   = $this->client->debugToken();
+        $scopes = $info['scopes'] ?? [];
+        $missing = array_values(array_diff(['whatsapp_business_messaging', 'whatsapp_business_management'], $scopes));
+
+        $issued = ! empty($info['issued_at']) ? date('d M Y', (int) $info['issued_at']) : null;
+        $type   = $info['type'] ?? 'unknown';
+        $who    = $type . ' token' . ($issued ? ' issued ' . $issued : '');
+
+        if ($missing) {
+            return [
+                'ok'      => false,
+                'message' => ucfirst($who) . ' is missing ' . implode(' and ', $missing)
+                    . '. WhatsApp sends will fail with "Object with ID … does not exist". Generate a new System User token in '
+                    . 'Meta Business Settings → System Users → Generate token, tick both WhatsApp permissions and assign the WABA '
+                    . 'to that system user, then paste it here and save.',
+            ];
+        }
+
+        if (empty($scopes)) {
+            return ['ok' => true, 'warn' => true, 'message' => ucfirst($who) . ' — Meta did not return its scopes, so permissions could not be verified.'];
+        }
+
+        return ucfirst($who) . ' has both WhatsApp permissions (' . count($scopes) . ' scopes).';
+    }
+
+    /**
+     * Prove the phone number id can be used with the token: it must load, and
+     * it should be one of the numbers Meta lists under the WABA. A Page ID,
+     * WABA ID or a number from another business pasted into the field is the
+     * usual reason outbound messages fail while inbound still arrive.
+     */
+    private function phoneNumberStatus(string $phoneNumberId, ?ChannelAccount $account, string $where): array|string
+    {
+        try {
+            $number = $this->client->forAccount($account)->get(
+                $phoneNumberId,
+                ['fields' => 'id,display_phone_number,verified_name,status,code_verification_status,quality_rating'],
+            );
+        } catch (MetaException $e) {
+            $hint = $this->listedNumbersHint($account);
+
+            return [
+                'ok'      => false,
+                'message' => 'Phone Number ID ' . $phoneNumberId . ' (' . $where . ') cannot be loaded with this token: '
+                    . $e->displayMessage() . $hint,
+            ];
+        }
+
+        $label = ($number['display_phone_number'] ?? $phoneNumberId) . ' · ' . ($number['verified_name'] ?? '')
+            . ' · ' . ($number['status'] ?? $number['code_verification_status'] ?? 'status n/a');
+
+        $status = strtoupper((string) ($number['status'] ?? ''));
+
+        if ($status && ! in_array($status, ['CONNECTED', 'VERIFIED'], true)) {
+            return [
+                'ok'      => true,
+                'warn'    => true,
+                'message' => $label . ' — the number is not CONNECTED, so Meta may reject sends. Check WhatsApp Manager → Phone numbers.',
+            ];
+        }
+
+        return $label;
+    }
+
+    private function listedNumbersHint(?ChannelAccount $account): string
+    {
+        try {
+            $listed = collect($this->whatsapp->phoneNumbers($account))
+                ->map(fn ($n) => ($n['display_phone_number'] ?? '?') . ' = ' . ($n['id'] ?? '?'))
+                ->implode(', ');
+        } catch (\Throwable) {
+            return '';
+        }
+
+        return $listed
+            ? ' The WABA lists: ' . $listed . '. Paste the matching ID.'
+            : ' The WABA lists no phone numbers for this token.';
+    }
+
+    /**
+     * Each active WhatsApp sender (Settings → Integrations → Channel accounts)
+     * may override the phone number id. The inbox always sends through the
+     * conversation's own account, so a stale override breaks replies even
+     * when the global Phone Number ID is right.
+     */
+    private function senderStatus($senders): array|string
+    {
+        $lines = [];
+        $bad   = false;
+        $warn  = false;
+
+        foreach ($senders as $account) {
+            $own = $account->credentials['phone_number_id'] ?? null;
+            $id  = $own ?: $this->client->phoneNumberId();
+
+            if (! $id) {
+                $lines[] = $account->name . ': no Phone Number ID (neither on the account nor globally)';
+                $bad = true;
+                continue;
+            }
+
+            $result = $this->phoneNumberStatus($id, $account, 'sender "' . $account->name . '"' . ($own ? '' : ', inherited'));
+
+            if (is_array($result)) {
+                $bad  = $bad || ! $result['ok'];
+                $warn = $warn || ! empty($result['warn']);
+                $lines[] = $result['message'];
+            } else {
+                $lines[] = $account->name . ($account->is_default ? ' (default)' : '') . ': ' . $result;
+            }
+        }
+
+        $message = implode(' | ', $lines);
+
+        return $bad
+            ? ['ok' => false, 'message' => $message]
+            : ($warn ? ['ok' => true, 'warn' => true, 'message' => $message] : $message);
+    }
+
+    /**
+     * Judge the WhatsApp webhook from the app's configuration when Meta
+     * cannot read the WABA's subscribed_apps list.
+     */
+    private function webhookStatusFromApp(MetaException $readBack): array
+    {
+        $subscription = $this->whatsapp->appWebhookSubscription();
+        $why          = 'Meta could not list this WABA\'s subscribed apps (their error ' . ($readBack->errorCode ?? '?') . ': ' . $readBack->getMessage() . ').';
+
+        if (! $subscription) {
+            throw new MetaException($why . ' The app has no whatsapp_business_account webhook either — set the callback URL and verify token under Meta App Dashboard → WhatsApp → Configuration, then click "Subscribe webhook".');
+        }
+
+        $callback = $subscription['callback_url'] ?? '';
+        $fields   = array_column($subscription['fields'] ?? [], 'name');
+
+        if (empty($subscription['active'])) {
+            throw new MetaException($why . ' The app\'s whatsapp_business_account webhook exists but is inactive — re-verify it in the Meta App Dashboard.');
+        }
+
+        if (rtrim($callback, '/') !== rtrim(url('/api/webhooks/meta'), '/')) {
+            throw new MetaException($why . ' The app\'s webhook points at ' . $callback . ', not this CRM — change the callback URL in the Meta App Dashboard.');
+        }
+
+        if (! in_array('messages', $fields, true)) {
+            throw new MetaException($why . ' The app\'s webhook is active but not subscribed to the "messages" field — tick it under Webhook fields in the Meta App Dashboard.');
+        }
+
+        $lastEvent = WebhookEvent::where('source', 'meta')->latest()->first();
+        $evidence  = $lastEvent
+            ? 'Last event received ' . $lastEvent->created_at->diffForHumans() . '.'
+            : 'No event has arrived yet — send a WhatsApp message to the business number to confirm end-to-end.';
+
+        return [
+            'ok'      => true,
+            'warn'    => true,
+            'message' => 'Webhook is configured and active for this app (' . implode(', ', $fields) . '). '
+                . $evidence . ' ' . $why,
+        ];
+    }
+
+    /**
+     * Meta's "(#200) Requires pages_manage_metadata permission" hides the
+     * real fix: the saved token predates that permission. Say what the token
+     * actually carries so the user can see the gap.
+     */
+    private function pageMetadataHint(MetaException $e): string
+    {
+        $message = $e->displayMessage();
+
+        if (! str_contains($e->getMessage(), 'pages_manage_metadata')) {
+            return $message;
+        }
+
+        $message = rtrim($message, '. ') . '.';
+
+        $issued = null;
+        $scopes = [];
+
+        try {
+            $info   = $this->client->debugToken();
+            $scopes = $info['scopes'] ?? [];
+            $issued = ! empty($info['issued_at']) ? date('d M Y', (int) $info['issued_at']) : null;
+        } catch (\Throwable) {
+            // Best effort only; the advice below stands without it.
+        }
+
+        $detail = $scopes
+            ? ' The saved token' . ($issued ? " (issued $issued)" : '') . ' carries: ' . implode(', ', $scopes) . ' — pages_manage_metadata is not among them.'
+            : '';
+
+        return $message . $detail
+            . ' Adding the permission to the app does not change tokens already issued: generate a new system-user token in Meta Business Settings '
+            . 'with pages_manage_metadata, pages_read_engagement and leads_retrieval, save it on the Meta tab, click Discover (which refreshes the Page token), then try again. '
+            . 'Until then leads still arrive through the 15-minute poll.';
     }
 
     /**
@@ -211,17 +464,7 @@ class IntegrationController extends Controller
                 'message' => 'Page subscribed. New Lead Ads submissions will now arrive through the webhook in real time.',
             ]);
         } catch (MetaException $e) {
-            $message = $e->displayMessage();
-
-            // Meta's own wording hides the fix: the token was generated without
-            // the Page-management scope, so it can read leads but not subscribe.
-            if (str_contains($e->getMessage(), 'pages_manage_metadata')) {
-                $message .= ' Generate a new system-user token in Meta Business Settings with the pages_manage_metadata, '
-                    . 'pages_read_engagement and leads_retrieval permissions, save it on the Meta tab, click Discover, then try again. '
-                    . 'Until then leads still arrive through the 15-minute poll.';
-            }
-
-            return response()->json(['success' => false, 'message' => $message], 422);
+            return response()->json(['success' => false, 'message' => $this->pageMetadataHint($e)], 422);
         }
     }
 
@@ -286,6 +529,8 @@ class IntegrationController extends Controller
             'phone_number_id' => ['nullable', 'string', 'max:64'],
             'waba_id'         => ['nullable', 'string', 'max:64'],
             'access_token'    => ['nullable', 'string', 'max:1000'],
+            'app_id'          => ['nullable', 'string', 'max:64'],
+            'app_secret'      => ['nullable', 'string', 'max:255'],
             'is_default'      => ['boolean'],
             'is_active'       => ['boolean'],
         ]);
@@ -294,6 +539,8 @@ class IntegrationController extends Controller
             'phone_number_id' => $data['phone_number_id'] ?? null,
             'waba_id'         => $data['waba_id'] ?? null,
             'access_token'    => $data['access_token'] ?? null,
+            'app_id'          => $data['app_id'] ?? null,
+            'app_secret'      => $data['app_secret'] ?? null,
         ]);
 
         $account = ChannelAccount::create([
@@ -325,17 +572,36 @@ class IntegrationController extends Controller
             'phone_number_id' => ['nullable', 'string', 'max:64'],
             'waba_id'         => ['nullable', 'string', 'max:64'],
             'access_token'    => ['nullable', 'string', 'max:1000'],
+            'app_id'          => ['nullable', 'string', 'max:64'],
+            'app_secret'      => ['nullable', 'string', 'max:255'],
+            'clear_app'       => ['boolean'],
             'is_default'      => ['boolean'],
             'is_active'       => ['boolean'],
         ]);
 
         $credentials = $account->credentials ?? [];
 
-        foreach (['phone_number_id', 'waba_id', 'access_token'] as $key) {
+        // Ids are shown in the form, so an emptied field means "remove the
+        // override"; secrets are never echoed, so blank there means "keep".
+        foreach (['phone_number_id', 'waba_id', 'app_id'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $credentials[$key] = $data[$key] ?: null;
+            }
+        }
+
+        foreach (['access_token', 'app_secret'] as $key) {
             if (! empty($data[$key])) {
                 $credentials[$key] = $data[$key];
             }
         }
+
+        // "Back to the shared app": drop the app-level overrides together so
+        // a stale secret can never be paired with the shared token.
+        if ($request->boolean('clear_app')) {
+            unset($credentials['app_id'], $credentials['app_secret']);
+        }
+
+        $credentials = array_filter($credentials, fn ($v) => $v !== null && $v !== '');
 
         $account->update([
             'name'        => $data['name'],
@@ -380,9 +646,12 @@ class IntegrationController extends Controller
             'identifier' => $account->identifier,
             'is_default' => $account->is_default,
             'is_active'  => $account->is_active,
-            // Credentials are never echoed back; blank means "keep".
-            'phone_number_id' => $account->credentials['phone_number_id'] ?? null,
-            'waba_id'         => $account->credentials['waba_id'] ?? null,
+            // Secrets are never echoed back; blank means "keep".
+            'phone_number_id'  => $account->credentials['phone_number_id'] ?? null,
+            'waba_id'          => $account->credentials['waba_id'] ?? null,
+            'app_id'           => $account->credentials['app_id'] ?? null,
+            'has_access_token' => ! empty($account->credentials['access_token']),
+            'has_app_secret'   => ! empty($account->credentials['app_secret']),
         ]);
     }
 }

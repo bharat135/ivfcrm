@@ -29,13 +29,19 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold">Mobile <span class="text-danger">*</span></label>
-                    <input type="text" name="mobile" class="form-control @error('mobile') is-invalid @enderror"
-                           value="{{ old('mobile') }}" placeholder="+91 XXXXX XXXXX" required>
+                    <input type="tel" name="mobile" class="form-control @error('mobile') is-invalid @enderror"
+                           value="{{ old('mobile', request('mobile')) }}" placeholder="10-digit mobile" required
+                           data-mobile10 inputmode="numeric" maxlength="10" pattern="[6-9][0-9]{9}"
+                           title="10-digit Indian mobile number, without +91 or 0">
                     @error('mobile')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold">Alternate Mobile</label>
-                    <input type="text" name="alt_mobile" class="form-control" value="{{ old('alt_mobile') }}">
+                    <input type="tel" name="alt_mobile" class="form-control @error('alt_mobile') is-invalid @enderror"
+                           value="{{ old('alt_mobile') }}" placeholder="10-digit mobile"
+                           data-mobile10 inputmode="numeric" maxlength="10" pattern="[6-9][0-9]{9}"
+                           title="10-digit Indian mobile number, without +91 or 0">
+                    @error('alt_mobile')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold">Email</label>
@@ -114,7 +120,7 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold">Assign To</label>
-                    @php($defaultAssignee = auth()->user()->hasRole(['Telecaller', 'Counsellor', 'Receptionist']) ? auth()->id() : '')
+                    @php($defaultAssignee = auth()->user()->hasRole(['Telecaller', 'Counsellor', 'Receptionist', 'Call Quality Analyst']) ? auth()->id() : '')
                     <select name="assigned_to" class="form-select">
                         <option value="">{{ $defaultAssignee ? 'Assign to me' : 'Auto Assign' }}</option>
                         @foreach($telecallers as $u)

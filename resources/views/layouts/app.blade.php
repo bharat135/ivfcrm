@@ -259,6 +259,11 @@
             <i class="bi bi-people-fill"></i> <span>Users</span>
         </a>
         @endcan
+        @role('Super Admin|Admin|Management')
+        <a href="{{ route('developers.index') }}" class="nav-link {{ request()->routeIs('developers.*') ? 'active' : '' }}">
+            <i class="bi bi-code-slash"></i> <span>API &amp; Developers</span>
+        </a>
+        @endrole
         @can('roles.view')
         <a href="{{ route('settings.roles.index') }}" class="nav-link {{ request()->routeIs('settings.roles.*') ? 'active' : '' }}">
             <i class="bi bi-shield-lock"></i> <span>Roles &amp; Permissions</span>
@@ -272,6 +277,11 @@
         @can('centers.view')
         <a href="{{ route('settings.centers.index') }}" class="nav-link {{ request()->routeIs('settings.centers.*') ? 'active' : '' }}">
             <i class="bi bi-building"></i> <span>Centers</span>
+        </a>
+        @endcan
+        @can('doctors.view')
+        <a href="{{ route('settings.doctors.index') }}" class="nav-link {{ request()->routeIs('settings.doctors.*') ? 'active' : '' }}">
+            <i class="bi bi-heart-pulse"></i> <span>Doctors</span>
         </a>
         @endcan
         @can('lead_sources.view')
@@ -359,8 +369,41 @@
     <div class="d-flex align-items-center gap-2">
         @yield('page-actions')
 
+        @can('leads.view')
+            {{-- Quick search a lead by mobile number --}}
+            <div class="dropdown" id="navSearchWrap">
+                <div class="input-group input-group-sm" style="width:200px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search" style="font-size:13px"></i></span>
+                    <input type="tel" class="form-control" id="navSearchInput" placeholder="Search mobile…"
+                           inputmode="numeric" maxlength="14" autocomplete="off" data-bs-toggle="dropdown" aria-expanded="false">
+                    <ul class="dropdown-menu dropdown-menu-end shadow" id="navSearchMenu" style="min-width:280px">
+                        <li><span class="dropdown-item-text text-muted small">Type a 10-digit number and press Enter.</span></li>
+                    </ul>
+                </div>
+            </div>
+
+            {{-- Assigned-leads tray --}}
+            <div class="dropdown">
+                <button class="btn btn-sm btn-link position-relative px-2" id="navAssigned" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="New leads assigned">
+                    <i class="bi bi-person-lines-fill" style="font-size:16px"></i>
+                    <span class="badge rounded-pill bg-danger position-absolute top-0 start-100 translate-middle d-none" id="navAssignedCount" style="font-size:10px">0</span>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end shadow p-0" style="min-width:340px; max-height:440px; overflow:hidden">
+                    <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center bg-light">
+                        <span class="fw-semibold small">New leads to call</span>
+                        <span class="badge bg-primary" id="navAssignedHeaderCount">0</span>
+                    </div>
+                    <div id="navAssignedList" style="max-height:340px; overflow-y:auto">
+                        <div class="text-center text-muted small py-4"><span class="spinner-border spinner-border-sm"></span></div>
+                    </div>
+                    <a href="{{ route('leads.index') }}" class="d-block text-center border-top py-2 small text-decoration-none">View all enquiries</a>
+                </div>
+            </div>
+        @endcan
+
         @can('call_logs.view')
             @include('telephony._dialer')
+            @include('telephony._websoftphone')
         @endcan
 
         <div class="fui-vr d-none d-md-block"></div>
@@ -370,6 +413,66 @@
         </button>
     </div>
 </header>
+
+@can('leads.view')
+@push('scripts')
+<script>
+$(function () {
+    // ---- Quick search a lead by mobile ----
+    const searchUrl = @json(route('leads.quick_search'));
+    const $input = $('#navSearchInput'), $menu = $('#navSearchMenu');
+
+    function renderSearch(html) { $menu.html(html); }
+
+    function runSearch() {
+        const mobile = $input.val().replace(/\D/g, '');
+        if (mobile.length < 10) { renderSearch('<li><span class="dropdown-item-text text-muted small">Type a 10-digit number.</span></li>'); return; }
+        renderSearch('<li><span class="dropdown-item-text small"><span class="spinner-border spinner-border-sm me-1"></span>Searching…</span></li>');
+        $.get(searchUrl, { mobile }).done(res => {
+            if (res.found) {
+                renderSearch(`<li><a class="dropdown-item" href="${res.url}"><i class="bi bi-person-check text-success me-2"></i><b>${$('<div>').text(res.lead.name).html()}</b>${res.lead.owner ? '<div class="small text-muted ms-4">Owner: ' + $('<div>').text(res.lead.owner).html() + '</div>' : ''}</a></li>`);
+            } else if (res.can_create) {
+                renderSearch(`<li><span class="dropdown-item-text small text-muted">No lead found for ${$('<div>').text(res.mobile).html()}.</span></li><li><a class="dropdown-item text-primary" href="${res.create_url}"><i class="bi bi-plus-circle me-2"></i>Add new lead (assigned to you)</a></li>`);
+            } else {
+                renderSearch('<li><span class="dropdown-item-text small text-muted">No lead found.</span></li>');
+            }
+        }).fail(() => renderSearch('<li><span class="dropdown-item-text small text-danger">Search failed.</span></li>'));
+    }
+
+    $input.on('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); if (!$input.attr('aria-expanded')) $input.dropdown?.('show'); } });
+
+    // ---- Assigned-leads tray ----
+    const trayUrl = @json(route('leads.assigned_tray'));
+
+    function loadTray() {
+        $.get(trayUrl).done(res => {
+            const $count = $('#navAssignedCount');
+            $('#navAssignedHeaderCount').text(res.count);
+            if (res.count > 0) { $count.text(res.count > 99 ? '99+' : res.count).removeClass('d-none'); }
+            else { $count.addClass('d-none'); }
+
+            if (!res.leads.length) {
+                $('#navAssignedList').html('<div class="text-center text-muted small py-4"><i class="bi bi-check2-circle d-block mb-1" style="font-size:1.5rem"></i>No new leads to call</div>');
+                return;
+            }
+            $('#navAssignedList').html(res.leads.map(l => `
+                <a href="${l.url}" class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none border-bottom">
+                    <i class="bi bi-person-circle text-primary" style="font-size:18px"></i>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="small fw-semibold text-truncate text-dark">${$('<div>').text(l.name).html()}</div>
+                        <div class="text-muted" style="font-size:11px">${l.owner ? $('<div>').text(l.owner).html() + ' · ' : ''}${l.when || ''}</div>
+                    </div>
+                </a>`).join(''));
+        });
+    }
+
+    loadTray();
+    setInterval(loadTray, 30000);
+    $('#navAssigned').on('click', loadTray);
+});
+</script>
+@endpush
+@endcan
 
 {{-- ==================================================================== --}}
 {{-- Main                                                                 --}}
@@ -647,6 +750,22 @@ paintThemeToggle();
 /* Tooltips on anything carrying a title */
 document.querySelectorAll('[title]:not([data-bs-toggle])').forEach(el => {
     new bootstrap.Tooltip(el, { delay: { show: 500, hide: 0 }, container: 'body' });
+});
+
+/* Mobile fields take exactly ten digits. A pasted "+91 98765 43210" or
+   "09876543210" is reduced to the subscriber number instead of being cut
+   off by maxlength at the wrong end. */
+document.addEventListener('input', function (e) {
+    const el = e.target;
+    if (!el.matches || !el.matches('input[data-mobile10]')) return;
+
+    let d = el.value.replace(/\D+/g, '');
+    if (d.startsWith('00')) d = d.slice(2);
+    if (d.length === 12 && d.startsWith('91')) d = d.slice(2);
+    if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
+    d = d.slice(0, 10);
+
+    if (d !== el.value) el.value = d;
 });
 
 /* Global AJAX error handling */

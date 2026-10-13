@@ -46,9 +46,21 @@
                         <select class="form-select" id="bookDoctor" required>
                             <option value="">Select Doctor</option>
                             @foreach($doctors as $d)
-                                <option value="{{ $d->id }}">Dr. {{ $d->name }} — {{ $d->specialization ?? '' }}</option>
+                                <option value="{{ $d->id }}" data-center="{{ $d->center_id ?? '' }}">
+                                    Dr. {{ $d->name }}{{ $d->specialization ? ' — ' . $d->specialization : '' }}{{ $d->center ? ' (' . $d->center->name . ')' : '' }}
+                                </option>
                             @endforeach
                         </select>
+                        @if($doctors->isEmpty())
+                            <div class="form-text text-danger">
+                                No active doctors yet.
+                                @can('doctors.create')
+                                    <a href="{{ route('settings.doctors.index') }}">Add doctors under Settings → Doctors</a> first.
+                                @else
+                                    Ask an administrator to add doctors under Settings → Doctors.
+                                @endcan
+                            </div>
+                        @endif
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold">Center <span class="text-danger">*</span></label>
@@ -103,6 +115,20 @@
 @push('scripts')
 <script>
 flatpickr('.flatpickr-dt', { enableTime: true, altInput: true, altFormat: 'd-m-Y h:i K', dateFormat: 'Y-m-d H:i', minDate: 'today', minuteIncrement: 15 });
+
+// Only offer doctors who consult at the chosen centre (doctors with no centre consult everywhere).
+function filterDoctorsByCenter() {
+    const center = $('#bookCenter').val();
+    $('#bookDoctor option[data-center]').each(function () {
+        const own = $(this).data('center');
+        const show = !center || !own || String(own) === String(center);
+        $(this).prop('hidden', !show).prop('disabled', !show);
+    });
+    if ($('#bookDoctor option:selected').prop('disabled')) $('#bookDoctor').val('');
+}
+$('#bookCenter').on('change', filterDoctorsByCenter);
+$('#bookModal').on('show.bs.modal', filterDoctorsByCenter);
+filterDoctorsByCenter();
 
 const table = $('#appointmentTable').DataTable({
     processing: true, serverSide: true,

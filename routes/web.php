@@ -45,7 +45,10 @@ Route::middleware(['auth', 'single.device'])->group(function () {
         Route::get('/next', [LeadController::class, 'next'])->name('next');
         Route::get('/create', [LeadController::class, 'create'])->middleware('can:leads.create')->name('create');
         Route::post('/', [LeadController::class, 'store'])->middleware('can:leads.create')->name('store');
-        Route::get('/{lead}', [LeadController::class, 'show'])->name('show');
+        // Static paths before the {lead} wildcard, or it swallows them.
+        Route::get('/quick-search', [LeadController::class, 'quickSearch'])->name('quick_search');
+        Route::get('/assigned-tray', [LeadController::class, 'assignedTray'])->name('assigned_tray');
+        Route::get('/{lead}', [LeadController::class, 'show'])->whereNumber('lead')->name('show');
         Route::get('/{lead}/edit', [LeadController::class, 'edit'])->name('edit');
         Route::put('/{lead}', [LeadController::class, 'update'])->name('update');
         Route::delete('/{lead}', [LeadController::class, 'destroy'])->name('destroy');
@@ -54,6 +57,14 @@ Route::middleware(['auth', 'single.device'])->group(function () {
         Route::post('/{lead}/stage', [LeadController::class, 'stageUpdate'])->name('stage');
         Route::patch('/{lead}/center', [LeadController::class, 'updateCenter'])->name('center');
         Route::post('/bulk-assign', [LeadController::class, 'bulkAssign'])->name('bulk_assign');
+
+        // Bulk calling: dial the selected leads one after another.
+        Route::middleware('can:call_logs.create')->prefix('bulk-call')->name('bulk_call.')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Telephony\DialSessionController::class, 'store'])->name('start');
+            Route::get('/current', [\App\Http\Controllers\Telephony\DialSessionController::class, 'current'])->name('current');
+            Route::post('/skip', [\App\Http\Controllers\Telephony\DialSessionController::class, 'skip'])->name('skip');
+            Route::post('/stop', [\App\Http\Controllers\Telephony\DialSessionController::class, 'stop'])->name('stop');
+        });
     });
 
     // Follow-ups
@@ -164,6 +175,16 @@ Route::middleware(['auth', 'single.device'])->group(function () {
             Route::delete('/{center}', [CenterController::class, 'destroy'])->middleware('can:centers.delete')->name('destroy');
         });
 
+        // Doctors (who consultations can be booked with)
+        Route::prefix('doctors')->name('doctors.')->middleware('can:doctors.view')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Settings\DoctorController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\Settings\DoctorController::class, 'store'])->middleware('can:doctors.create')->name('store');
+            Route::get('/{doctor}/edit', [\App\Http\Controllers\Settings\DoctorController::class, 'edit'])->middleware('can:doctors.edit')->name('edit');
+            Route::put('/{doctor}', [\App\Http\Controllers\Settings\DoctorController::class, 'update'])->middleware('can:doctors.edit')->name('update');
+            Route::patch('/{doctor}/toggle', [\App\Http\Controllers\Settings\DoctorController::class, 'toggle'])->middleware('can:doctors.edit')->name('toggle');
+            Route::delete('/{doctor}', [\App\Http\Controllers\Settings\DoctorController::class, 'destroy'])->middleware('can:doctors.delete')->name('destroy');
+        });
+
         // Lead Sources
         Route::prefix('lead-sources')->name('lead_sources.')->middleware('can:lead_sources.view')->group(function () {
             Route::get('/', [LeadSourceController::class, 'index'])->name('index');
@@ -192,5 +213,12 @@ Route::middleware(['auth', 'single.device'])->group(function () {
             Route::patch('/{rule}/toggle', [AssignmentRuleController::class, 'toggle'])->middleware('can:assignment_rules.edit')->name('toggle');
             Route::delete('/{rule}', [AssignmentRuleController::class, 'destroy'])->middleware('can:assignment_rules.delete')->name('destroy');
         });
+    });
+
+    // Live API documentation + token manager (admin).
+    Route::prefix('developers')->name('developers.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\DeveloperController::class, 'docs'])->name('index');
+        Route::post('/tokens', [\App\Http\Controllers\DeveloperController::class, 'createToken'])->name('tokens.store');
+        Route::delete('/tokens/{id}', [\App\Http\Controllers\DeveloperController::class, 'revokeToken'])->name('tokens.destroy');
     });
 });

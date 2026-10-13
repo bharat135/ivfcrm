@@ -193,7 +193,7 @@ class AssignmentRuleController extends Controller
     private function agents()
     {
         return User::where('is_active', true)
-            ->whereHas('roles', fn ($q) => $q->whereIn('name', ['Telecaller', 'Counsellor', 'Center Manager', 'Receptionist']))
+            ->whereHas('roles', fn ($q) => $q->whereIn('name', ['Telecaller', 'Counsellor', 'Center Manager', 'Receptionist', 'Call Quality Analyst']))
             ->with('center:id,name')
             ->orderBy('name')
             ->get(['id', 'name', 'center_id', 'is_available']);

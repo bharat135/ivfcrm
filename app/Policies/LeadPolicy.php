@@ -7,6 +7,11 @@ use App\Models\User;
 
 class LeadPolicy
 {
+    public function create(User $user): bool
+    {
+        return $user->can('leads.create') || $user->can('lead_imports.create');
+    }
+
     public function view(User $user, Lead $lead): bool
     {
         if ($user->hasRole(['Super Admin', 'Management', 'Marketing Head', 'Call Quality Analyst'])) {

@@ -89,6 +89,7 @@ class Lead extends Model
     public function callLogs(): HasMany        { return $this->hasMany(CallLog::class)->orderByDesc('created_at'); }
     public function activities(): HasMany      { return $this->hasMany(LeadActivity::class)->orderByDesc('created_at'); }
     public function assignments(): HasMany     { return $this->hasMany(LeadAssignment::class)->orderByDesc('assigned_at'); }
+    public function sourceTouches(): HasMany   { return $this->hasMany(LeadSourceTouch::class)->orderBy('occurred_at'); }
 
     public function tags(): MorphMany
     {

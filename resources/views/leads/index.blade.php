@@ -97,6 +97,11 @@
             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#bulkAssignModal">
                 <i class="bi bi-person-check"></i>Bulk assign
             </button>
+            @can('call_logs.create')
+                <button class="btn btn-sm btn-success" id="bulkCall" title="Call the selected leads one after another; each outcome you save dials the next">
+                    <i class="bi bi-telephone-outbound"></i>Bulk call
+                </button>
+            @endcan
             <button class="btn btn-sm btn-link ms-auto" id="clearSelection">Clear</button>
         </div>
         <div class="table-responsive">
@@ -107,13 +112,16 @@
                         <th>Name</th>
                         <th>Mobile</th>
                         <th>Came from</th>
+                        <th>Sub Source</th>
+                        <th>Campaign</th>
                         <th>Stage</th>
                         <th>Disposition</th>
                         <th>Assigned To</th>
+                        <th>Assigned On</th>
                         <th>Center</th>
                         <th>Score</th>
                         <th>Next Follow-Up</th>
-                        <th>Created</th>
+                        <th>Added On</th>
                         <th width="80">Actions</th>
                     </tr>
                 </thead>
@@ -180,7 +188,7 @@ let selectedLeads = [];
 const leadsTable = $('#leadsTable').DataTable({
     processing: true,
     serverSide: true,
-    order: [[10, 'desc']],   // Created, newest first
+    order: [[13, 'desc']],   // Added On, newest first
     ajax: {
         url: '{{ route("leads.index") }}',
         data: function(d) {
@@ -202,9 +210,13 @@ const leadsTable = $('#leadsTable').DataTable({
           } },
         { data: 'mobile' },
         { data: 'origin', name: 'channel', orderable: true },
+        { data: 'sub_source', defaultContent: '—' },
+        { data: 'campaign_name', defaultContent: '—' },
         { data: 'stage_badge', orderable: false },
         { data: 'disposition_badge', orderable: false },
         { data: 'assigned_to.name', defaultContent: '<span class="text-warning small">Unassigned</span>' },
+        { data: 'assigned_at', defaultContent: '—',
+          render: d => d ? FUI.dateTime(d) : '<span class="text-muted">—</span>' },
         { data: 'center.code', defaultContent: '—' },
         { data: 'score_band', defaultContent: '—',
           render: d => d ? `<span class="badge ${d==='hot'?'bg-danger':d==='warm'?'bg-warning text-dark':'bg-info'}">${d}</span>` : '—' },
@@ -212,7 +224,7 @@ const leadsTable = $('#leadsTable').DataTable({
           render: d => d
             ? `<span class="${new Date(d) < new Date() ? 'text-danger fw-semibold' : ''}">${FUI.dateTime(d)}</span>`
             : '<span class="text-muted">—</span>' },
-        { data: 'created_at', render: d => FUI.date(d) },
+        { data: 'created_at', render: d => d ? FUI.dateTime(d) : '—' },
         { data: 'action', orderable: false, searchable: false },
     ],
     buttons: [
@@ -255,6 +267,31 @@ function updateBulkBar() {
         $('#bulkActions').removeClass('d-flex').addClass('d-none');
     }
 }
+
+// Bulk call: the selected leads become a queue; the first one opens and is
+// dialled, and every saved outcome dials the next.
+$('#bulkCall').on('click', function () {
+    if (!selectedLeads.length) return;
+    const $btn = $(this).prop('disabled', true);
+
+    Swal.fire({
+        title: 'Start bulk calling?',
+        text: selectedLeads.length + ' lead(s) will be called one after another. Your phone rings first for each call, then the lead is connected.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Start calling',
+    }).then(result => {
+        if (!result.isConfirmed) return $btn.prop('disabled', false);
+
+        $.post('{{ route("leads.bulk_call.start") }}', { lead_ids: selectedLeads })
+            .done(r => {
+                if (!r.success) { toastr.error(r.message); return $btn.prop('disabled', false); }
+                toastr.success(r.message);
+                window.location.href = r.redirect;
+            })
+            .fail(xhr => { toastr.error(xhr.responseJSON?.message || 'Could not start bulk calling.'); $btn.prop('disabled', false); });
+    });
+});
 
 // Bulk assign
 $('#doBulkAssign').on('click', function() {

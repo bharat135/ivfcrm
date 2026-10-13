@@ -259,8 +259,8 @@ class PatientController extends Controller
         $data = $request->validate([
             'wife_name'                   => ['nullable', 'string', 'max:191'],
             'husband_name'                => ['nullable', 'string', 'max:191'],
-            'mobile'                      => ['sometimes', 'string', 'max:20'],
-            'alt_mobile'                  => ['nullable', 'string', 'max:20'],
+            'mobile'                      => ['sometimes', 'string', 'max:20', new \App\Rules\IndianMobile()],
+            'alt_mobile'                  => ['nullable', 'string', 'max:20', new \App\Rules\IndianMobile()],
             'email'                       => ['nullable', 'email', 'max:191'],
             // Ages and years are typed; dates are stored so they keep counting.
             'wife_age'                    => ['nullable', 'integer', 'min:1', 'max:100'],
