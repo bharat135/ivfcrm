@@ -61,6 +61,10 @@ Three scripts, run in this order. Nothing is installed by hand on the box.
    the Vite assets and rsyncs them across; `post-deploy.sh` migrates, caches and
    starts the queue worker.
 
+   Optional: `bash deploy/phpmyadmin-setup.sh` on the server installs phpMyAdmin at
+   `/phpmyadmin` (standalone copy under `/var/www/phpmyadmin`, served by the same
+   nginx site and PHP-FPM). Log in with the `DB_USERNAME` / `DB_PASSWORD` from `.env`.
+
 4. **Go live**: move the domain's A record to the new IP, then on the server
 
    ```bash
