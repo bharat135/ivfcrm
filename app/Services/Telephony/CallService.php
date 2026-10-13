@@ -511,9 +511,11 @@ class CallService
 
     private function hangupViaTata(CallLog $call): void
     {
-        // Smartflo only knows the call by its own call id, which arrives with
-        // the first webhook. Before that the agent simply ends it on the phone.
-        $callId = $call->channel_id ?: $call->linked_id;
+        // Smartflo only knows the call by its own call id, which normally
+        // arrives with the first webhook. When no webhook has come yet (or the
+        // webhooks point elsewhere), look the call up among the account's
+        // live calls so Disconnect still drops the real leg.
+        $callId = $call->channel_id ?: $call->linked_id ?: $this->findLiveTataCallId($call);
 
         if ($callId) {
             try {
@@ -527,6 +529,54 @@ class CallService
             'status'    => $call->answered_at ? 'completed' : 'cancelled',
             'hangup_by' => 'agent',
         ]);
+    }
+
+    /**
+     * Find our outbound call among Smartflo's live calls: by the echoed
+     * custom_identifier when present, else by the customer number together
+     * with the agent leg. Null when it is not (or no longer) live.
+     */
+    private function findLiveTataCallId(CallLog $call): ?string
+    {
+        try {
+            $live = $this->tata->liveCalls();
+        } catch (TataException $e) {
+            Log::info('Smartflo live-call lookup skipped', ['call_log_id' => $call->id, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+
+        $digits = fn ($v) => substr(preg_replace('/\D+/', '', (string) $v), -10);
+        $customer = $digits($call->to_number);
+        $agent    = $digits($call->meta['agent_number'] ?? $call->extension);
+
+        foreach ($live as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $id = $row['call_id'] ?? $row['id'] ?? $row['uuid'] ?? null;
+            if (! $id) {
+                continue;
+            }
+
+            $custom = $row['custom_identifier'] ?? null;
+            if (is_string($custom) && str_contains($custom, '{')) {
+                $custom = json_decode($custom, true);
+            }
+            if (is_array($custom) && (string) ($custom['crm_call_id'] ?? '') === (string) $call->id) {
+                return (string) $id;
+            }
+
+            $rowCustomer = $digits($row['client_number'] ?? $row['customer_number'] ?? $row['call_to_number'] ?? $row['destination'] ?? '');
+            $rowAgent    = $digits($row['agent_number'] ?? $row['caller_id_number'] ?? $row['from'] ?? '');
+
+            if ($customer && $rowCustomer === $customer && (! $agent || ! $rowAgent || $rowAgent === $agent)) {
+                return (string) $id;
+            }
+        }
+
+        return null;
     }
 
     /**
