@@ -13,7 +13,7 @@
 # via deploy/migrate-data-to-new-server.sh — this script installs no app files.
 #
 # Second mode, after DNS points at this server:
-#   DOMAIN=crm.example.com EMAIL=you@example.com bash deploy/ubuntu-setup.sh tls
+#   DOMAIN=crm.example.com [EMAIL=you@example.com] bash deploy/ubuntu-setup.sh tls
 set -euo pipefail
 
 APP_DIR=/var/www/ivfcrm
@@ -27,9 +27,9 @@ if [ "$(id -u)" != "0" ]; then echo "run as root"; exit 1; fi
 
 tls_mode() {
   [ "$DOMAIN" != "_" ] || { echo "DOMAIN is required for tls"; exit 1; }
-  EMAIL=${EMAIL:?EMAIL is required for tls}
   apt-get install -y -q python3-certbot-nginx >/dev/null
-  certbot --nginx --non-interactive --agree-tos --redirect -m "$EMAIL" -d "$DOMAIN"
+  if [ -n "${EMAIL:-}" ]; then CONTACT=(-m "$EMAIL"); else CONTACT=(--register-unsafely-without-email); fi
+  certbot --nginx --non-interactive --agree-tos --redirect "${CONTACT[@]}" -d "$DOMAIN"
   nginx -t && systemctl reload nginx
   if [ -f "$APP_DIR/.env" ]; then
     sed -i "s#^APP_URL=.*#APP_URL=https://$DOMAIN#" "$APP_DIR/.env"
