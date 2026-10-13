@@ -46,7 +46,7 @@ fi
 
 # Queue workers keep the old code in memory until told to stop.
 "$PHP" artisan queue:restart || true
-if command -v systemctl >/dev/null 2>&1 && systemctl list-units --type=service --all 2>/dev/null | grep -q 'ivfcrm-queue'; then
+if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files ivfcrm-queue.service 2>/dev/null | grep -q 'ivfcrm-queue'; then
   systemctl restart ivfcrm-queue || sudo -n systemctl restart ivfcrm-queue || true
 fi
 
