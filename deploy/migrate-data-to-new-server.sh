@@ -25,6 +25,8 @@ NEW_DB_NAME=${NEW_DB_NAME:-ivfcrm}
 NEW_DB_USER=${NEW_DB_USER:-ivfcrm}
 NEW_DB_PASSWORD=${NEW_DB_PASSWORD:?NEW_DB_PASSWORD}
 NEW_APP_URL=${NEW_APP_URL:-}
+# The session cookie is scoped to SESSION_DOMAIN; it must follow the new host or every login fails with 419.
+NEW_HOST=$(printf '%s' "$NEW_APP_URL" | sed -E 's#^[a-z]+://##; s#[:/].*$##')
 FREEZE=${FREEZE:-0}
 
 OPTS=(-o ServerAliveInterval=15 -o ServerAliveCountMax=6 -o ConnectTimeout=20)
@@ -55,7 +57,7 @@ new "cd $NEW_DIR \
   && cp .env .env.from-old-server \
   && sed -i -E 's#^DB_HOST=.*#DB_HOST=127.0.0.1#; s#^DB_PORT=.*#DB_PORT=3306#; s#^DB_DATABASE=.*#DB_DATABASE=$NEW_DB_NAME#; s#^DB_USERNAME=.*#DB_USERNAME=$NEW_DB_USER#' .env \
   && sed -i -E \"s#^DB_PASSWORD=.*#DB_PASSWORD=\\\"$NEW_DB_PASSWORD\\\"#\" .env \
-  && { [ -z '$NEW_APP_URL' ] || sed -i -E 's#^APP_URL=.*#APP_URL=$NEW_APP_URL#' .env; } \
+  && { [ -z '$NEW_APP_URL' ] || sed -i -E 's#^APP_URL=.*#APP_URL=$NEW_APP_URL#; s#^SESSION_DOMAIN=.*#SESSION_DOMAIN=$NEW_HOST#' .env; } \
   && chown -R www-data:www-data $NEW_DIR \
   && chmod 640 .env .env.from-old-server \
   && grep -E '^(APP_URL|APP_ENV|DB_HOST|DB_DATABASE|DB_USERNAME|QUEUE_CONNECTION|CACHE_STORE|SESSION_DRIVER)=' .env"

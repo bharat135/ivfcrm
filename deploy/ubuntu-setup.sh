@@ -32,7 +32,7 @@ tls_mode() {
   certbot --nginx --non-interactive --agree-tos --redirect "${CONTACT[@]}" -d "$DOMAIN"
   nginx -t && systemctl reload nginx
   if [ -f "$APP_DIR/.env" ]; then
-    sed -i "s#^APP_URL=.*#APP_URL=https://$DOMAIN#" "$APP_DIR/.env"
+    sed -i "s#^APP_URL=.*#APP_URL=https://$DOMAIN#; s#^SESSION_DOMAIN=.*#SESSION_DOMAIN=$DOMAIN#" "$APP_DIR/.env"
     (cd "$APP_DIR" && sudo -u www-data php artisan config:cache) || true
   fi
   echo "==> TLS ready: https://$DOMAIN"
