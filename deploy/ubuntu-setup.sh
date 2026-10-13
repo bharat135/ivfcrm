@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot bootstrap of a FRESH Ubuntu 22.04/24.04 server for IVF CRM.
+# One-shot bootstrap of a FRESH Ubuntu 22.04/24.04/26.04 server for IVF CRM.
 # Run as root ON THE NEW SERVER. Idempotent: safe to re-run.
 #
 #   DOMAIN=crm.example.com DB_PASSWORD='secret' DEPLOY_PUBKEY='ssh-ed25519 AAAA...' \
@@ -17,6 +17,7 @@
 set -euo pipefail
 
 APP_DIR=/var/www/ivfcrm
+PHP_VERSION=${PHP_VERSION:-8.3}
 DB_NAME=${DB_NAME:-ivfcrm}
 DB_USER=${DB_USER:-ivfcrm}
 DOMAIN=${DOMAIN:-_}
@@ -45,23 +46,26 @@ export DEBIAN_FRONTEND=noninteractive
 echo "==> packages"
 apt-get update -q
 apt-get install -y -q software-properties-common ca-certificates curl gnupg lsb-release >/dev/null
-# Ubuntu 22.04 ships PHP 8.1; the ondrej PPA gives 8.3 on both 22.04 and 24.04.
-if ! apt-cache show php8.3-fpm >/dev/null 2>&1; then
-  add-apt-repository -y ppa:ondrej/php >/dev/null
+# Only 24.04 ships 8.3; 22.04 (8.1) and 26.04 (8.5) get it from packages.sury.org
+# (the ondrej PPA has no builds for 26.04). PHP_VERSION=8.5 on 26.04 uses the distro build.
+if ! apt-cache show php${PHP_VERSION}-fpm >/dev/null 2>&1; then
+  curl -sSLo /tmp/debsuryorg-archive-keyring.deb https://packages.sury.org/debsuryorg-archive-keyring.deb
+  dpkg -i /tmp/debsuryorg-archive-keyring.deb >/dev/null
+  echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list
   apt-get update -q
 fi
 apt-get install -y -q \
   nginx mysql-server redis-server certbot rsync unzip git ufw \
-  php8.3-fpm php8.3-cli php8.3-mysql php8.3-mbstring php8.3-xml php8.3-curl \
-  php8.3-zip php8.3-gd php8.3-intl php8.3-bcmath php8.3-redis php8.3-gmp \
-  php8.3-opcache php8.3-readline >/dev/null
+  php${PHP_VERSION}-fpm php${PHP_VERSION}-cli php${PHP_VERSION}-mysql php${PHP_VERSION}-mbstring php${PHP_VERSION}-xml php${PHP_VERSION}-curl \
+  php${PHP_VERSION}-zip php${PHP_VERSION}-gd php${PHP_VERSION}-intl php${PHP_VERSION}-bcmath php${PHP_VERSION}-redis php${PHP_VERSION}-gmp \
+  php${PHP_VERSION}-opcache php${PHP_VERSION}-readline >/dev/null
 
 echo "==> php.ini"
-for ini in /etc/php/8.3/fpm/php.ini /etc/php/8.3/cli/php.ini; do
+for ini in /etc/php/${PHP_VERSION}/fpm/php.ini /etc/php/${PHP_VERSION}/cli/php.ini; do
   sed -i -E 's/^;?upload_max_filesize = .*/upload_max_filesize = 32M/; s/^;?post_max_size = .*/post_max_size = 32M/; s/^;?memory_limit = .*/memory_limit = 512M/; s/^;?max_execution_time = .*/max_execution_time = 300/; s/^;?date.timezone =.*/date.timezone = Asia\/Kolkata/' "$ini"
 done
-systemctl enable --now php8.3-fpm redis-server mysql nginx >/dev/null
-systemctl restart php8.3-fpm
+systemctl enable --now php${PHP_VERSION}-fpm redis-server mysql nginx >/dev/null
+systemctl restart php${PHP_VERSION}-fpm
 
 echo "==> mysql database $DB_NAME / user $DB_USER"
 mysql <<SQL
@@ -101,7 +105,7 @@ server {
 
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_pass unix:/run/php/php${PHP_VERSION}-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_read_timeout 300;
