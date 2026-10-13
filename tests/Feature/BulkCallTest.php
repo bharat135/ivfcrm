@@ -356,6 +356,40 @@ class BulkCallTest extends TestCase
             ->assertSee(route('calls.recording', $call), false);
     }
 
+    public function test_the_profile_can_disconnect_the_live_call(): void
+    {
+        $lead = $this->lead(self::FIRST, 'On The Line');
+
+        // The Disconnect button ships hidden on every profile; the dialer shows
+        // it while the agent's live call belongs to this lead or patient.
+        $this->actingAs($this->agent)
+            ->get(route('leads.show', $lead))
+            ->assertOk()
+            ->assertSee('js-hangup-call d-none', false)
+            ->assertSee('data-lead="' . $lead->id . '"', false);
+
+        $call = CallLog::create([
+            'lead_id' => $lead->id, 'patient_id' => $lead->patient?->id, 'user_id' => $this->agent->id,
+            'center_id' => $this->agent->center_id, 'provider' => 'tata', 'channel' => 'pstn',
+            'direction' => 'outbound', 'to_number' => self::FIRST, 'status' => 'answered',
+            'started_at' => now()->subMinute(), 'answered_at' => now()->subSeconds(30), 'channel_id' => 'live.1',
+        ]);
+
+        $this->actingAs($this->agent)->getJson(route('calls.current'))
+            ->assertOk()
+            ->assertJsonPath('call.id', $call->id)
+            ->assertJsonPath('call.is_live', true)
+            ->assertJsonPath('call.lead_id', $lead->id)
+            ->assertJsonPath('call.patient_id', $lead->patient?->id);
+
+        Http::fake([self::API . '/v1/call/hangup' => Http::response(['success' => true])]);
+
+        $this->actingAs($this->agent)->postJson(route('calls.hangup', $call))->assertOk();
+
+        $this->assertNotNull($call->fresh()->ended_at);
+        $this->actingAs($this->agent)->getJson(route('calls.current'))->assertJsonPath('call.is_live', false);
+    }
+
     public function test_the_edit_form_renders_the_ten_digit_pattern_unescaped(): void
     {
         $lead = $this->lead(self::FIRST, 'Edit Form');

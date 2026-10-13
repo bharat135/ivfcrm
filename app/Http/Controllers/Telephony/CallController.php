@@ -673,6 +673,7 @@ class CallController extends Controller
             'contact'       => $call->contactName(),
             'number'        => \App\Support\PhoneNumber::display($call->contactNumber()),
             'lead_id'       => $call->lead_id,
+            'patient_id'    => $call->patient_id,
             'lead_url'      => $call->lead_id ? route('leads.show', $call->lead_id) : null,
             'agent'         => $call->user?->name,
             'provider'      => $call->provider,

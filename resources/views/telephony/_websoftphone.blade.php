@@ -136,6 +136,9 @@
         // The public API the dialer calls in place of server click-to-call.
         window.CrmSoftphone = {
             isRegistered: () => registered && !!ua,
+            inCall: () => !!session,
+            // Ends the browser call; the 'ended' event then closes the log.
+            hangup: () => { if (session) try { session.terminate(); } catch (e) {} },
             call: function (payload, $button) {
                 if (session) { toastr.warning('Finish the current call first.'); return; }
                 $button && $button.prop('disabled', true);

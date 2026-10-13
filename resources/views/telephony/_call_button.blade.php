@@ -32,6 +32,15 @@
                 <i class="bi bi-telephone-outbound me-1"></i>{{ $label }}
             </button>
 
+            {{-- Swapped in by the global dialer while a call to this contact
+                 is live: ends the call from the profile itself. --}}
+            <button type="button" class="btn btn-danger js-hangup-call d-none"
+                    @if($leadId) data-lead="{{ $leadId }}" @endif
+                    @if($patientId) data-patient="{{ $patientId }}" @endif
+                    title="End the current call">
+                <i class="bi bi-telephone-x me-1"></i>Disconnect
+            </button>
+
             @if($showWhatsApp && config('telephony.whatsapp_calling.enabled'))
                 <button type="button" class="btn btn-outline-success js-whatsapp-call"
                         data-number="{{ $dialNumber }}"

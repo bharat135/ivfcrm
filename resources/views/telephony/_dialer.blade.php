@@ -222,6 +222,8 @@
 
             const call = res.call;
 
+            syncHangupButtons(call && call.is_live ? call : null);
+
             if (call && call.is_live) {
                 showLiveCall(call);
             } else {
@@ -307,6 +309,44 @@
     $(document).on('click', '.js-callback', function () {
         const $b = $(this);
         dial({ lead_id: $b.data('lead') }, $b);
+    });
+
+    // ------------------------------------------------------------------
+    // Disconnect from the profile
+    // ------------------------------------------------------------------
+    // While a call is live, the Call button of the contact on the line turns
+    // into Disconnect. Matched by lead or patient id so a call started from
+    // the leads list still shows up on that lead's profile.
+    let liveCallId = null;
+
+    function syncHangupButtons(call) {
+        liveCallId = call ? call.id : null;
+
+        $('.js-hangup-call').each(function () {
+            const $h = $(this);
+            const mine = !!call && (
+                (call.lead_id && String($h.data('lead')) === String(call.lead_id)) ||
+                (call.patient_id && String($h.data('patient')) === String(call.patient_id))
+            );
+            $h.toggleClass('d-none', !mine).prop('disabled', false);
+            $h.siblings('.js-click-to-call').toggleClass('d-none', mine);
+        });
+    }
+
+    $(document).on('click', '.js-hangup-call', function () {
+        const $b = $(this).prop('disabled', true);
+
+        // A browser (WebRTC) call is ended by the softphone itself, which then
+        // closes the call log; a Smartflo / Asterisk leg is dropped server-side.
+        if (window.CrmSoftphone && window.CrmSoftphone.inCall && window.CrmSoftphone.inCall()) {
+            window.CrmSoftphone.hangup();
+            return;
+        }
+        if (!liveCallId) { syncHangupButtons(null); return; }
+
+        $.post(routes.call(liveCallId) + '/hangup')
+            .done(res => { toastr.info(res.message || 'Call ended.'); syncHangupButtons(null); poll(); })
+            .fail(xhr => { toastr.error(xhr.responseJSON?.message || 'Could not end the call.'); $b.prop('disabled', false); });
     });
 
     $('#btnDial').on('click', function () {
