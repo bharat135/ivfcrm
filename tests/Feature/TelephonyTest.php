@@ -363,8 +363,9 @@ class TelephonyTest extends TestCase
         $this->assertNotNull($call->ended_at);
         $this->assertTrue($call->isConnected());
 
-        // The agent drops into wrap-up, not straight back to idle.
-        $this->assertSame('wrapup', $this->agent->fresh()->call_status);
+        // Outcomes are logged from the lead profile, never forced, so the
+        // agent goes straight back to idle (wrap-up only with force_disposition).
+        $this->assertSame('idle', $this->agent->fresh()->call_status);
 
         // And the call is mirrored into the lead timeline.
         $this->assertDatabaseHas('lead_activities', [

@@ -767,8 +767,11 @@ class CallService
             ], fn ($v) => $v !== null));
 
             if ($call->user) {
-                // Wrap-up gives the agent time to disposition before the next call.
-                $this->setAgentStatus($call->user, 'wrapup', null);
+                // With mandatory outcomes, wrap-up holds the agent until the
+                // call is dispositioned. Otherwise they are free straight away:
+                // the outcome is logged from the lead's profile whenever they
+                // get to it.
+                $this->setAgentStatus($call->user, $this->forceDisposition() ? 'wrapup' : 'idle', null);
             }
 
             $this->logToLead($call);

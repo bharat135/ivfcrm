@@ -4,8 +4,8 @@
     Included once from the app layout so that:
       - any .js-click-to-call button anywhere in the CRM works,
       - a live call is always visible in the topbar,
-      - the disposition modal appears the moment a call ends,
-        which is what actually keeps call outcomes filled in.
+      - the call-outcome modal can be opened from any "Add outcome" button.
+        It is never forced open: outcomes are logged on the lead's profile.
 --}}
 @php
     $callService    = app(\App\Services\Telephony\CallService::class);
@@ -34,7 +34,7 @@
      click-to-call / call-outcome / recording handlers below stay active. --}}
 
 {{-- ================= Disposition modal ================= --}}
-<div class="modal fade" id="dispositionModal" tabindex="-1" data-bs-backdrop="static">
+<div class="modal fade" id="dispositionModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
@@ -231,11 +231,10 @@
                 // final segments reach the server before we summarise.
                 if (recogCallId) stopTranscript(true);
 
-                // A finished call with no outcome pops the disposition modal —
-                // the only reliable way to keep call outcomes complete.
-                if (call && call.needs_disposition && activeCall?.id !== call.id) {
-                    openDisposition(call);
-                }
+                // No outcome pop-up here: the agent records the outcome on the
+                // lead's profile ("Log a call"), which also stamps the call.
+                // The modal stays reachable from the "Add outcome" buttons on
+                // call lists for calls that have no lead.
             }
 
             activeCall = call;
@@ -569,8 +568,8 @@
     // ------------------------------------------------------------------
     // Boot
     // ------------------------------------------------------------------
-    // The web softphone widget drives the disposition flow through poll() when
-    // a browser call ends, and reuses the dial route as its fallback.
+    // The web softphone widget refreshes the live-call pane through poll()
+    // when a browser call ends, and reuses the dial route as its fallback.
     window.CrmDialer = { poll, routes };
 
     poll();

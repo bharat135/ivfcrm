@@ -340,7 +340,8 @@ class TataSmartfloTest extends TestCase
         $this->assertSame('completed', $call->status);
         $this->assertSame('agent', $call->hangup_by);
         $this->assertNotNull($call->ended_at);
-        $this->assertSame('wrapup', $this->agent->fresh()->call_status);
+        // Outcomes are not enforced by default, so the agent is free straight away.
+        $this->assertSame('idle', $this->agent->fresh()->call_status);
     }
 
     public function test_transfers_are_not_offered_for_tata_calls(): void
@@ -416,7 +417,7 @@ class TataSmartfloTest extends TestCase
         $this->assertNotNull($call->answered_at);
         $this->assertNotNull($call->ended_at);
 
-        $this->assertSame('wrapup', $this->agent->fresh()->call_status);
+        $this->assertSame('idle', $this->agent->fresh()->call_status);
         $this->assertDatabaseHas('lead_activities', ['lead_id' => $lead->id, 'type' => 'call']);
         $this->assertSame(1, CallEvent::where('call_log_id', $call->id)->where('event', 'hangup')->count());
     }

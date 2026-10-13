@@ -157,9 +157,11 @@ return [
         'end'   => (int) env('FOLLOWUP_HOURS_END', 20),
     ],
 
-    // Every call must be dispositioned before the agent can dial again.
-    // Overridable at runtime from Tata Teleservices → Configuration.
-    'force_disposition' => env('TELEPHONY_FORCE_DISPOSITION', true),
+    // Off by default: outcomes are logged on the lead's profile and never
+    // forced on the agent. Turning this on (here or from Tata Teleservices →
+    // Configuration) blocks the next dial until the last call has an outcome
+    // and parks the agent in "wrapup" after each call.
+    'force_disposition' => env('TELEPHONY_FORCE_DISPOSITION', false),
 
     // Live transcript in the agent's browser (Web Speech API) + one-line summary.
     'transcription' => [

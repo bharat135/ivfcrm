@@ -43,6 +43,20 @@ tls_mode() {
 : "${DB_PASSWORD:?DB_PASSWORD is required}"
 
 export DEBIAN_FRONTEND=noninteractive
+
+echo "==> dns"
+# A dead first nameserver makes every lookup wait out its timeout (5 s by
+# default), which is longer than the app's connect timeout to Smartflo/Meta:
+# calls then fail with "could not be reached". On a static resolv.conf (no
+# systemd-resolved), put public resolvers first.
+if [ "$(systemctl is-active systemd-resolved 2>/dev/null)" != "active" ] && [ -f /etc/resolv.conf ] && [ ! -L /etc/resolv.conf ]; then
+  if ! grep -qE '^nameserver (1\.1\.1\.1|8\.8\.8\.8)' /etc/resolv.conf; then
+    cp -a /etc/resolv.conf /etc/resolv.conf.orig
+    { printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n'; grep -E '^nameserver' /etc/resolv.conf.orig; printf 'options timeout:2 attempts:2\n'; } > /etc/resolv.conf
+    echo "    resolv.conf rewritten (original kept in /etc/resolv.conf.orig)"
+  fi
+fi
+
 echo "==> packages"
 apt-get update -q
 apt-get install -y -q software-properties-common ca-certificates curl gnupg lsb-release >/dev/null
