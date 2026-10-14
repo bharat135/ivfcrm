@@ -347,6 +347,75 @@ class MetaWhatsAppIntegrationTest extends TestCase
     }
 
     // -----------------------------------------------------------------
+    // Template variables are compulsory
+    // -----------------------------------------------------------------
+
+    public function test_a_template_cannot_be_sent_with_an_empty_variable(): void
+    {
+        $template = \App\Models\WhatsappTemplate::create([
+            'name' => 'appt_reminder', 'language' => 'en', 'category' => 'UTILITY', 'status' => 'APPROVED',
+            'body_text' => 'Hi {{1}}, your appointment is on {{2}}.', 'variable_count' => 2,
+        ]);
+
+        $conversation = Conversation::create([
+            'channel'            => 'whatsapp',
+            'contact_identifier' => '919700088777',
+            'status'             => 'open',
+        ]);
+
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.TPL1']]])]);
+
+        // One blank value: refused before anything reaches Meta.
+        $this->actingAs($this->admin)
+            ->postJson(route('chat.send_template', $conversation), [
+                'template_id' => $template->id,
+                'params'      => [1 => 'Asha', 2 => '  '],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertSee('{{2}}', false);
+
+        Http::assertNothingSent();
+        $this->assertDatabaseMissing('messages', ['conversation_id' => $conversation->id, 'type' => 'template']);
+
+        // Both filled: sent, with the rendered body stored.
+        $this->actingAs($this->admin)
+            ->postJson(route('chat.send_template', $conversation), [
+                'template_id' => $template->id,
+                'params'      => [1 => 'Asha', 2 => 'Monday 10 am'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'type'            => 'template',
+            'body'            => 'Hi Asha, your appointment is on Monday 10 am.',
+        ]);
+    }
+
+    public function test_a_broadcast_needs_every_variable_mapped(): void
+    {
+        $template = \App\Models\WhatsappTemplate::create([
+            'name' => 'promo', 'language' => 'en', 'category' => 'MARKETING', 'status' => 'APPROVED',
+            'body_text' => 'Hello {{1}}, {{2}} off this week.', 'variable_count' => 2,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->postJson(route('marketing.broadcasts.store'), [
+                'name'                 => 'Week offer',
+                'whatsapp_template_id' => $template->id,
+                'audience_type'        => 'leads',
+                'variable_map'         => [1 => 'field:name'],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertSee('{{2}}', false);
+
+        $this->assertDatabaseMissing('whatsapp_broadcasts', ['name' => 'Week offer']);
+    }
+
+    // -----------------------------------------------------------------
     // Third-party WhatsApp API (1automations)
     // -----------------------------------------------------------------
 

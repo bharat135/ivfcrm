@@ -117,6 +117,22 @@ class BroadcastController extends Controller
             ], 422);
         }
 
+        // Every placeholder needs a mapping (a contact field or fixed text).
+        $map = $data['variable_map'] ?? [];
+        $unmapped = [];
+        for ($i = 1; $i <= (int) $template->variable_count; $i++) {
+            if (trim((string) ($map[$i] ?? $map[(string) $i] ?? '')) === '') {
+                $unmapped[] = $i;
+            }
+        }
+        if ($unmapped) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Map every template variable before sending — missing: '
+                    . WhatsappTemplate::describeVariables($unmapped) . '.',
+            ], 422);
+        }
+
         $contacts = $this->audienceQuery($request)->get();
 
         if ($contacts->isEmpty()) {

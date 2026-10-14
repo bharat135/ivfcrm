@@ -331,13 +331,24 @@ $(function () {
         for (let i = 1; i <= vars; i++) {
             html += `
                 <div class="mb-2">
-                    <label class="form-label small">Variable @{{${i}}}</label>
-                    <input type="text" class="form-control form-control-sm rc-tpl-var" data-index="${i}" placeholder="Value for @{{${i}}}">
+                    <label class="form-label small">Variable @{{${i}}} <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm rc-tpl-var" data-index="${i}" placeholder="Value for @{{${i}}}" required maxlength="512">
                 </div>`;
         }
         $('#rcTplVars').html(html);
         updateTemplatePreview();
     });
+
+    // Every placeholder must have a value (Meta rejects a short parameter list).
+    function rcMissingTemplateVars() {
+        const missing = [];
+        $('.rc-tpl-var').each(function () {
+            const empty = ! $(this).val().trim();
+            $(this).toggleClass('is-invalid', empty);
+            if (empty) missing.push('@{{' + $(this).data('index') + '@}}');
+        });
+        return missing;
+    }
 
     $(document).on('input', '.rc-tpl-var', updateTemplatePreview);
 
@@ -357,8 +368,14 @@ $(function () {
         if (! templateId) return toastr.warning('Choose a template.');
         if (! tplTarget) return;
 
+        const missing = rcMissingTemplateVars();
+        if (missing.length) {
+            $('.rc-tpl-var.is-invalid').first().focus();
+            return toastr.warning('Fill in every template variable: ' + missing.join(', ') + '.');
+        }
+
         const params = {};
-        $('.rc-tpl-var').each(function () { params[$(this).data('index')] = $(this).val(); });
+        $('.rc-tpl-var').each(function () { params[$(this).data('index')] = $(this).val().trim(); });
 
         const $btn = $(this).prop('disabled', true);
 

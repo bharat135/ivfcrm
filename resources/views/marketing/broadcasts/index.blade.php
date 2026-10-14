@@ -220,20 +220,47 @@ $(function () {
         const options = Object.entries(personalisation)
             .map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 
-        let html = '<label class="form-label">Personalisation</label>';
+        let html = '<label class="form-label">Personalisation <span class="text-danger">*</span></label>'
+                 + '<div class="form-text mb-2">Every placeholder needs a contact field or fixed text.</div>';
         for (let i = 1; i <= vars; i++) {
             html += `
                 <div class="input-group input-group-sm mb-2">
                     <span class="input-group-text">@{{${i}}}</span>
-                    <select class="form-select" name="variable_map[${i}]">
-                        <option value="">— static text —</option>${options}
+                    <select class="form-select bc-var" name="variable_map[${i}]" data-index="${i}" required>
+                        <option value="">— choose a field or type text —</option>${options}
                     </select>
-                    <input type="text" class="form-control" placeholder="or type fixed text"
-                           oninput="this.previousElementSibling.value = this.value ? this.value : ''">
+                    <input type="text" class="form-control bc-var-text" placeholder="or type fixed text" maxlength="191">
                 </div>`;
         }
         $('#bcVars').html(html);
     });
+
+    // Typed text becomes an option of the mapping select (a select cannot
+    // hold a value it has no option for), so it is what the form submits.
+    $(document).on('input', '.bc-var-text', function () {
+        const sel = this.previousElementSibling;
+        let opt = sel.querySelector('option[data-fixed]');
+        if (!opt) { opt = document.createElement('option'); opt.dataset.fixed = '1'; sel.appendChild(opt); }
+        opt.value = this.value.trim();
+        opt.textContent = 'Fixed text: ' + this.value.trim();
+        sel.value = this.value.trim();
+        $(sel).removeClass('is-invalid');
+    });
+    $(document).on('change', '.bc-var', function () {
+        const text = this.nextElementSibling;
+        if (text && this.value && !this.selectedOptions[0]?.dataset.fixed) text.value = '';
+        $(this).removeClass('is-invalid');
+    });
+
+    function missingBroadcastVars() {
+        const missing = [];
+        $('.bc-var').each(function () {
+            const empty = !$(this).val();
+            $(this).toggleClass('is-invalid', empty);
+            if (empty) missing.push('@{{' + $(this).data('index') + '@}}');
+        });
+        return missing;
+    }
 
     $('#btnEstimate').on('click', function () {
         const $btn = $(this).prop('disabled', true);
@@ -250,6 +277,12 @@ $(function () {
 
         // Which submit button was pressed decides send-now vs draft.
         const sendNow = document.activeElement?.value === '1' ? 1 : 0;
+
+        const missing = missingBroadcastVars();
+        if (missing.length) {
+            $('.bc-var.is-invalid').first().focus();
+            return toastr.warning('Map every template variable: ' + missing.join(', ') + '.');
+        }
         const $buttons = $(this).find('[type=submit]').prop('disabled', true);
 
         $.post(@json(route('marketing.broadcasts.store')), $(this).serialize() + '&send_now=' + sendNow)

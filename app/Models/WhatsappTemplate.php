@@ -83,6 +83,34 @@ class WhatsappTemplate extends Model
     }
 
     /**
+     * Placeholders ({{n}}, 1-based) that the supplied values leave empty.
+     * Every variable is compulsory: Meta rejects a template whose parameter
+     * count differs from the body, and a blank value sends a message with a
+     * hole in it.
+     *
+     * @return int[]
+     */
+    public function missingVariables(array $params): array
+    {
+        $values  = array_values($params);
+        $missing = [];
+
+        for ($i = 0; $i < (int) $this->variable_count; $i++) {
+            if (trim((string) ($values[$i] ?? '')) === '') {
+                $missing[] = $i + 1;
+            }
+        }
+
+        return $missing;
+    }
+
+    /** "{{1}}, {{3}}" — for validation messages. */
+    public static function describeVariables(array $indexes): string
+    {
+        return implode(', ', array_map(fn ($i) => '{{' . $i . '}}', $indexes));
+    }
+
+    /**
      * Render the body with supplied values, for the chat preview bubble.
      */
     public function render(array $params = []): string

@@ -932,13 +932,25 @@
         for (let i = 1; i <= vars; i++) {
             html += `
                 <div class="mb-2">
-                    <label class="form-label small">Variable @{{${i}}}</label>
-                    <input type="text" class="form-control form-control-sm tpl-var" data-index="${i}" placeholder="Value for @{{${i}}}">
+                    <label class="form-label small">Variable @{{${i}}} <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm tpl-var" data-index="${i}" placeholder="Value for @{{${i}}}" required maxlength="512">
                 </div>`;
         }
         $('#templateVars').html(html);
         updateTemplatePreview();
     });
+
+    // Every placeholder must have a value: Meta rejects a short parameter
+    // list and a blank leaves a hole in the message.
+    function missingTemplateVars(selector) {
+        const missing = [];
+        $(selector).each(function () {
+            const empty = !$(this).val().trim();
+            $(this).toggleClass('is-invalid', empty);
+            if (empty) missing.push('@{{' + $(this).data('index') + '@}}');
+        });
+        return missing;
+    }
 
     $(document).on('input', '.tpl-var', updateTemplatePreview);
 
@@ -958,8 +970,14 @@
         const templateId = $('#templateSelect').val();
         if (!templateId) return toastr.warning('Choose a template.');
 
+        const missing = missingTemplateVars('.tpl-var');
+        if (missing.length) {
+            $('.tpl-var.is-invalid').first().focus();
+            return toastr.warning('Fill in every template variable: ' + missing.join(', ') + '.');
+        }
+
         const params = {};
-        $('.tpl-var').each(function () { params[$(this).data('index')] = $(this).val(); });
+        $('.tpl-var').each(function () { params[$(this).data('index')] = $(this).val().trim(); });
 
         $(this).prop('disabled', true);
 

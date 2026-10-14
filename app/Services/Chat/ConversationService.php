@@ -312,6 +312,14 @@ class ConversationService
             );
         }
 
+        // Every placeholder is compulsory, whichever screen or job sends it.
+        if ($missing = $template->missingVariables($bodyParams)) {
+            throw new MetaException(
+                'Fill in every template variable before sending — missing: '
+                . WhatsappTemplate::describeVariables($missing) . '.',
+            );
+        }
+
         $message = $this->createOutbound($conversation, [
             'type'          => 'template',
             'template_name' => $template->name,
