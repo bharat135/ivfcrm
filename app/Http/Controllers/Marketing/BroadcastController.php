@@ -32,7 +32,13 @@ class BroadcastController extends Controller
     public function index(Request $request)
     {
         if ($request->ajax() || $request->wantsJson()) {
-            $query = WhatsappBroadcast::with(['template:id,name', 'creator:id,name', 'center:id,name']);
+            $query = WhatsappBroadcast::with(['template:id,name', 'creator:id,name', 'center:id,name'])
+                ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
+                ->when($request->filled('whatsapp_template_id'), fn ($q) => $q->where('whatsapp_template_id', $request->integer('whatsapp_template_id')))
+                ->when($request->filled('center_id'), fn ($q) => $q->where('center_id', $request->integer('center_id')))
+                ->when($request->filled('audience_type'), fn ($q) => $q->where('audience_type', $request->string('audience_type')))
+                ->when($request->filled('from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('from')))
+                ->when($request->filled('to'), fn ($q) => $q->whereDate('created_at', '<=', $request->date('to')));
 
             return DataTables::of($query)
                 ->addColumn('status_badge', fn (WhatsappBroadcast $b) =>

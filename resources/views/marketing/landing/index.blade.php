@@ -11,8 +11,31 @@
 @section('content')
 
 <div class="card shadow-sm">
-    <div class="card-header bg-white d-flex align-items-center gap-2">
+    <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
         <span class="fw-semibold me-auto"><i class="bi bi-window-desktop me-2"></i>Landing Pages</span>
+
+        <select class="form-select form-select-sm w-auto" id="fPublished">
+            <option value="">Published and drafts</option>
+            <option value="1">Published</option>
+            <option value="0">Draft</option>
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fCampaign">
+            <option value="">All campaigns</option>
+            @foreach($campaigns as $campaign)
+                <option value="{{ $campaign->id }}">{{ $campaign->name }}</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fCenter">
+            <option value="">All centres</option>
+            @foreach($centers as $center)
+                <option value="{{ $center->id }}">{{ $center->name }}</option>
+            @endforeach
+        </select>
+
+        <button class="btn btn-sm btn-link text-decoration-none" id="fReset" title="Clear filters"><i class="bi bi-x-circle"></i></button>
+
         @can('landing_pages.create')
             <a href="{{ route('marketing.landing.create') }}" class="btn btn-sm btn-primary">
                 <i class="bi bi-plus-lg me-1"></i>New page
@@ -48,7 +71,14 @@ $(function () {
         processing: true,
         serverSide: true,
         order: [[0, 'desc']],
-        ajax: @json(route('marketing.landing.index')),
+        ajax: {
+            url: @json(route('marketing.landing.index')),
+            data: d => {
+                d.published   = $('#fPublished').val();
+                d.campaign_id = $('#fCampaign').val();
+                d.center_id   = $('#fCenter').val();
+            },
+        },
         columns: [
             { data: 'name' },
             { data: 'url', orderable: false },
@@ -60,6 +90,9 @@ $(function () {
             { data: 'action', orderable: false, searchable: false },
         ],
     });
+
+    $('#fPublished, #fCampaign, #fCenter').on('change', () => table.ajax.reload());
+    $('#fReset').on('click', () => { $('#fPublished, #fCampaign, #fCenter').val(''); table.ajax.reload(); });
 
     $(document).on('click', '.js-publish', function () {
         const id = $(this).data('id');

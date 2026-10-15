@@ -321,6 +321,14 @@ class MetaSyncService
             return false;
         }
 
+        // Older submissions than the configured floor are left alone: after a
+        // deliberate data clear the catch-up pull must not bring them back.
+        $ignoreBefore = config('meta.leads.ignore_before');
+        if ($ignoreBefore && ! empty($remote['created_time'])
+            && Carbon::parse($remote['created_time'])->lt(Carbon::parse($ignoreBefore, config('app.timezone')))) {
+            return false;
+        }
+
         $form = $form ?: MetaLeadForm::where('external_id', $remote['form_id'] ?? '')->first();
 
         $answers = [];

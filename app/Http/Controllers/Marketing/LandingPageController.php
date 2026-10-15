@@ -29,7 +29,10 @@ class LandingPageController extends Controller
     {
         if ($request->ajax() || $request->wantsJson()) {
             $query = LandingPage::with(['campaign:id,name', 'center:id,name', 'creator:id,name'])
-                ->withCount('submissionRecords');
+                ->withCount('submissionRecords')
+                ->when($request->filled('published'), fn ($q) => $q->where('is_published', $request->boolean('published')))
+                ->when($request->filled('campaign_id'), fn ($q) => $q->where('campaign_id', $request->integer('campaign_id')))
+                ->when($request->filled('center_id'), fn ($q) => $q->where('center_id', $request->integer('center_id')));
 
             return DataTables::of($query)
                 ->addColumn('status_badge', fn (LandingPage $p) => $p->is_published
@@ -43,7 +46,10 @@ class LandingPageController extends Controller
                 ->make(true);
         }
 
-        return view('marketing.landing.index');
+        return view('marketing.landing.index', [
+            'campaigns' => \App\Models\Campaign::orderByDesc('id')->get(['id', 'name']),
+            'centers'   => \App\Models\Center::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+        ]);
     }
 
     public function create()

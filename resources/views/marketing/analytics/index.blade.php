@@ -36,6 +36,15 @@
             </select>
         </div>
         <div>
+            <label class="form-label small mb-1">Ad set</label>
+            <select class="form-select form-select-sm" id="fAdset" style="max-width:240px">
+                <option value="">All ad sets</option>
+                @foreach($adsets as $adset)
+                    <option value="{{ $adset->id }}" data-campaign="{{ $adset->campaign_id }}" @selected($filters['adset_id'] == $adset->id)>{{ $adset->campaign?->name }} → {{ $adset->name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div>
             <label class="form-label small mb-1">Lead source</label>
             <select class="form-select form-select-sm" id="fSource">
                 <option value="">All sources</option>
@@ -44,7 +53,17 @@
                 @endforeach
             </select>
         </div>
+        <div>
+            <label class="form-label small mb-1">Channel</label>
+            <select class="form-select form-select-sm" id="fChannel">
+                <option value="">All channels</option>
+                @foreach($channelOptions as $value => $label)
+                    <option value="{{ $value }}" @selected($filters['channel'] == $value)>{{ $label }}</option>
+                @endforeach
+            </select>
+        </div>
         <button class="btn btn-sm btn-primary" id="btnApply"><i class="bi bi-funnel me-1"></i>Apply</button>
+        <button class="btn btn-sm btn-link text-decoration-none" id="fReset" title="Clear filters"><i class="bi bi-x-circle"></i></button>
         <a href="{{ route('marketing.analytics.funnel') }}" class="btn btn-sm btn-outline-secondary ms-auto">
             <i class="bi bi-filter-circle me-1"></i>Conversion funnel
         </a>
@@ -177,10 +196,10 @@ $(function () {
         altFormat: 'd-m-Y',
         dateFormat: 'Y-m-d',
         defaultDate: [filters.from, filters.to],
-        onClose(dates) {
+        onClose(dates, _str, fp) {
             if (dates.length === 2) {
-                filters.from = dates[0].toISOString().slice(0, 10);
-                filters.to   = dates[1].toISOString().slice(0, 10);
+                filters.from = fp.formatDate(dates[0], 'Y-m-d');
+                filters.to   = fp.formatDate(dates[1], 'Y-m-d');
             }
         },
     });
@@ -193,7 +212,9 @@ $(function () {
             to: filters.to,
             center_id: $('#fCenter').val(),
             campaign_id: $('#fCampaign').val(),
+            adset_id: $('#fAdset').val(),
             lead_source_id: $('#fSource').val(),
+            channel: $('#fChannel').val(),
         };
     }
 
@@ -281,6 +302,17 @@ $(function () {
     }
 
     function loadAll() { loadTrend(); loadBreakdown(); loadLandingPages(); }
+
+    // An ad set belongs to one campaign: picking it narrows the campaign too.
+    $('#fAdset').on('change', function () {
+        const campaign = this.selectedOptions[0]?.dataset.campaign;
+        if (campaign) $('#fCampaign').val(campaign);
+    });
+    $('#fCampaign').on('change', function () {
+        const adset = $('#fAdset')[0].selectedOptions[0];
+        if (this.value && adset?.dataset.campaign && adset.dataset.campaign !== this.value) $('#fAdset').val('');
+    });
+    $('#fReset').on('click', () => { location.href = '{{ route('marketing.analytics.index') }}'; });
 
     $('#btnApply').on('click', function () {
         const params = new URLSearchParams(currentFilters());

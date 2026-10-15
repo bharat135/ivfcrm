@@ -39,6 +39,49 @@
 <div class="card shadow-sm">
     <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
         <span class="fw-semibold me-auto"><i class="bi bi-ui-checks me-2"></i>Instant Forms</span>
+
+        <select class="form-select form-select-sm w-auto" id="fStatus">
+            <option value="">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="ARCHIVED">Archived</option>
+            <option value="DELETED">Deleted</option>
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fCenter">
+            <option value="">All centres</option>
+            @foreach($centers as $center)
+                <option value="{{ $center->id }}">{{ $center->name }}</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fCampaign">
+            <option value="">All campaigns</option>
+            @foreach($campaigns as $campaign)
+                <option value="{{ $campaign->id }}">{{ $campaign->name }}</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fSource">
+            <option value="">All lead sources</option>
+            @foreach($sources as $source)
+                <option value="{{ $source->id }}">{{ $source->name }}</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fRouting">
+            <option value="">Any routing</option>
+            <option value="routed">Routed to a centre / agent</option>
+            <option value="unrouted">Auto-assign only</option>
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fAutoSync">
+            <option value="">Auto-sync: any</option>
+            <option value="1">Auto-sync on</option>
+            <option value="0">Auto-sync off</option>
+        </select>
+
+        <button class="btn btn-sm btn-link text-decoration-none" id="fReset" title="Clear filters"><i class="bi bi-x-circle"></i></button>
+
         <button class="btn btn-sm btn-outline-secondary" id="btnSync"><i class="bi bi-arrow-repeat me-1"></i>Sync from Meta</button>
         @can('campaigns.create')
             <button class="btn btn-sm btn-primary" id="btnNew"><i class="bi bi-plus-lg me-1"></i>New form</button>
@@ -254,7 +297,17 @@ $(function () {
         processing: true,
         serverSide: true,
         order: [[0, 'asc']],
-        ajax: @json(route('marketing.leadforms.index')),
+        ajax: {
+            url: @json(route('marketing.leadforms.index')),
+            data: d => {
+                d.status         = $('#fStatus').val();
+                d.center_id      = $('#fCenter').val();
+                d.campaign_id    = $('#fCampaign').val();
+                d.lead_source_id = $('#fSource').val();
+                d.routing        = $('#fRouting').val();
+                d.auto_sync      = $('#fAutoSync').val();
+            },
+        },
         columns: [
             { data: 'name' },
             { data: 'status_badge', orderable: false },
@@ -265,6 +318,12 @@ $(function () {
             { data: 'synced', orderable: false },
             { data: 'action', orderable: false, searchable: false },
         ],
+    });
+
+    $('#fStatus, #fCenter, #fCampaign, #fSource, #fRouting, #fAutoSync').on('change', () => table.ajax.reload());
+    $('#fReset').on('click', () => {
+        $('#fStatus, #fCenter, #fCampaign, #fSource, #fRouting, #fAutoSync').val('');
+        table.ajax.reload();
     });
 
     $('#btnSubscribePage').on('click', function () {

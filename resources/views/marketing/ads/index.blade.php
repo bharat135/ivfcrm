@@ -33,11 +33,37 @@
             @endforeach
         </select>
 
+        <select class="form-select form-select-sm w-auto" id="fCampaign">
+            <option value="">All campaigns</option>
+            @foreach($campaigns as $campaign)
+                <option value="{{ $campaign->id }}">{{ $campaign->name }}</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fCenter">
+            <option value="">All centres</option>
+            @foreach($centers as $center)
+                <option value="{{ $center->id }}">{{ $center->name }}</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fForm">
+            <option value="">All instant forms</option>
+            @foreach($leadForms as $form)
+                <option value="{{ $form->id }}">{{ $form->name }}</option>
+            @endforeach
+        </select>
+
         <select class="form-select form-select-sm w-auto" id="fStatus">
             <option value="">All statuses</option>
             <option value="ACTIVE">Active</option>
             <option value="PAUSED">Paused</option>
+            <option value="ARCHIVED">Archived</option>
         </select>
+
+        <input type="text" class="form-control form-control-sm w-auto" id="fRange" placeholder="Last 30 days" title="Spend, impressions and CTR are summed for this period">
+
+        <button class="btn btn-sm btn-link text-decoration-none" id="fReset" title="Clear filters"><i class="bi bi-x-circle"></i></button>
 
         @can('campaigns.create')
             <button class="btn btn-sm btn-primary" id="btnNew"><i class="bi bi-plus-lg me-1"></i>New ad</button>
@@ -224,6 +250,20 @@
 $(function () {
     let previewAdId = null;
 
+    let range = { from: null, to: null };
+
+    flatpickr('#fRange', {
+        mode: 'range', altInput: true, altFormat: 'd-m-Y', dateFormat: 'Y-m-d',
+        defaultDate: [@json(now()->subDays(30)->toDateString()), @json(now()->toDateString())],
+        onClose(dates, _str, fp) {
+            if (dates.length === 2) {
+                range.from = fp.formatDate(dates[0], 'Y-m-d');
+                range.to   = fp.formatDate(dates[1], 'Y-m-d');
+                table.ajax.reload();
+            }
+        },
+    });
+
     const table = $('#adTable').DataTable({
         processing: true,
         serverSide: true,
@@ -231,8 +271,13 @@ $(function () {
         ajax: {
             url: @json(route('marketing.ads.index')),
             data: d => {
-                d.adset_id = $('#fAdset').val();
-                d.status   = $('#fStatus').val();
+                d.adset_id     = $('#fAdset').val();
+                d.campaign_id  = $('#fCampaign').val();
+                d.center_id    = $('#fCenter').val();
+                d.lead_form_id = $('#fForm').val();
+                d.status       = $('#fStatus').val();
+                d.from         = range.from;
+                d.to           = range.to;
             },
         },
         columns: [
@@ -249,7 +294,13 @@ $(function () {
         ],
     });
 
-    $('#fAdset, #fStatus').on('change', () => table.ajax.reload());
+    $('#fAdset, #fCampaign, #fCenter, #fForm, #fStatus').on('change', () => table.ajax.reload());
+    $('#fReset').on('click', () => {
+        $('#fAdset, #fCampaign, #fCenter, #fForm, #fStatus').val('');
+        range = { from: null, to: null };
+        document.getElementById('fRange')._flatpickr?.setDate([@json(now()->subDays(30)->toDateString()), @json(now()->toDateString())], false);
+        table.ajax.reload();
+    });
 
     $('#btnNew').on('click', function () {
         $('#adForm')[0].reset();

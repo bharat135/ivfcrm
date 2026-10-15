@@ -37,7 +37,16 @@ class LeadFormController extends Controller
     {
         if ($request->ajax() || $request->wantsJson()) {
             $query = MetaLeadForm::with(['source:id,name', 'center:id,name', 'assignee:id,name'])
-                ->withCount('ads');
+                ->withCount('ads')
+                ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
+                ->when($request->filled('center_id'), fn ($q) => $q->where('center_id', $request->integer('center_id')))
+                ->when($request->filled('campaign_id'), fn ($q) => $q->where('campaign_id', $request->integer('campaign_id')))
+                ->when($request->filled('lead_source_id'), fn ($q) => $q->where('lead_source_id', $request->integer('lead_source_id')))
+                ->when($request->filled('assign_to'), fn ($q) => $q->where('assign_to', $request->integer('assign_to')))
+                ->when($request->filled('auto_sync'), fn ($q) => $q->where('auto_sync', $request->boolean('auto_sync')))
+                ->when($request->filled('routing'), fn ($q) => $request->string('routing') == 'unrouted'
+                    ? $q->whereNull('center_id')->whereNull('assign_to')
+                    : $q->where(fn ($w) => $w->whereNotNull('center_id')->orWhereNotNull('assign_to')));
 
             return DataTables::of($query)
                 ->addColumn('status_badge', fn (MetaLeadForm $f) =>

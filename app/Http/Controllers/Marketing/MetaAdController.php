@@ -33,8 +33,11 @@ class MetaAdController extends Controller
     public function index(Request $request)
     {
         if ($request->ajax() || $request->wantsJson()) {
+            $from = $request->date('from') ?: now()->subDays(30);
+            $to   = $request->date('to') ?: now();
+
             $stats = MetaInsight::where('level', 'ad')
-                ->where('date', '>=', now()->subDays(30))
+                ->whereBetween('date', [$from, $to])
                 ->selectRaw('entity_id, SUM(spend) spend, SUM(impressions) impressions, SUM(clicks) clicks, SUM(leads) leads')
                 ->groupBy('entity_id')
                 ->get()
@@ -45,6 +48,9 @@ class MetaAdController extends Controller
                 ->when($request->filled('adset_id'), fn ($q) => $q->where('adset_id', $request->integer('adset_id')))
                 ->when($request->filled('campaign_id'), fn ($q) =>
                     $q->whereHas('adset', fn ($a) => $a->where('campaign_id', $request->integer('campaign_id'))))
+                ->when($request->filled('center_id'), fn ($q) =>
+                    $q->whereHas('adset.campaign', fn ($c) => $c->where('center_id', $request->integer('center_id'))))
+                ->when($request->filled('lead_form_id'), fn ($q) => $q->where('lead_form_id', $request->integer('lead_form_id')))
                 ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')));
 
             return DataTables::of($query)
@@ -70,6 +76,8 @@ class MetaAdController extends Controller
 
         return view('marketing.ads.index', [
             'adsets'       => Adset::with('campaign:id,name')->orderByDesc('id')->get(),
+            'campaigns'    => \App\Models\Campaign::orderByDesc('id')->get(['id', 'name']),
+            'centers'      => \App\Models\Center::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'leadForms'    => MetaLeadForm::active()->get(['id', 'external_id', 'name']),
             'landingPages' => LandingPage::published()->get(['id', 'name', 'slug']),
             'configured'   => $this->client->isAdsConfigured(),

@@ -35,7 +35,9 @@ class AnalyticsController extends Controller
             'filters'   => $filters,
             'centers'   => Center::where('is_active', true)->orderBy('name')->get(),
             'campaigns' => Campaign::orderByDesc('id')->get(['id', 'name']),
+            'adsets'    => Adset::with('campaign:id,name')->orderByDesc('id')->get(['id', 'name', 'campaign_id']),
             'sources'   => LeadSource::where('is_active', true)->orderBy('name')->get(),
+            'channelOptions' => \App\Support\AcquisitionChannel::options(),
             'summary'   => $this->summary($filters),
         ]);
     }
@@ -58,6 +60,8 @@ class AnalyticsController extends Controller
             ->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
             ->when($filters['center_id'], fn ($q) => $q->where('center_id', $filters['center_id']))
             ->when($filters['campaign_id'], fn ($q) => $q->where('campaign_id', $filters['campaign_id']))
+            ->when($filters['adset_id'], fn ($q) => $q->where('adset_id', $filters['adset_id']))
+            ->when($filters['channel'], fn ($q) => $q->where('channel', $filters['channel']))
             ->when($filters['lead_source_id'], fn ($q) => $q->where('lead_source_id', $filters['lead_source_id']));
 
         $crmLeads = (clone $leadQuery)->count();
@@ -110,6 +114,9 @@ class AnalyticsController extends Controller
             ->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
             ->when($filters['center_id'], fn ($q) => $q->where('center_id', $filters['center_id']))
             ->when($filters['campaign_id'], fn ($q) => $q->where('campaign_id', $filters['campaign_id']))
+            ->when($filters['adset_id'], fn ($q) => $q->where('adset_id', $filters['adset_id']))
+            ->when($filters['lead_source_id'], fn ($q) => $q->where('lead_source_id', $filters['lead_source_id']))
+            ->when($filters['channel'], fn ($q) => $q->where('channel', $filters['channel']))
             ->selectRaw('DATE(created_at) d, COUNT(*) c, SUM(status = "won") w')
             ->groupBy('d')
             ->get()
@@ -163,13 +170,29 @@ class AnalyticsController extends Controller
             default => 'campaign_id',
         };
 
+        // The campaign / centre / ad-set filters narrow which rows are listed;
+        // the lead-level filters (source, channel) narrow what counts as a lead.
+        $campaignScope = fn ($q, string $column) => $q
+            ->when($filters['campaign_id'], fn ($w) => $w->where($column, $filters['campaign_id']))
+            ->when($filters['center_id'], fn ($w) => $w->whereIn($column, Campaign::where('center_id', $filters['center_id'])->select('id')));
+
+        $leadFilters = fn ($q) => $q
+            ->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
+            ->when($filters['lead_source_id'], fn ($w) => $w->where('lead_source_id', $filters['lead_source_id']))
+            ->when($filters['channel'], fn ($w) => $w->where('channel', $filters['channel']));
+
         $rows = $model::query()
             ->whereIn('id', $stats->keys()->all() ?: [0])
+            ->when($level === 'campaign', fn ($q) => $campaignScope($q, 'id'))
+            ->when($level === 'adset', fn ($q) => $campaignScope($q, 'campaign_id')
+                ->when($filters['adset_id'], fn ($w) => $w->where('id', $filters['adset_id'])))
+            ->when($level === 'ad', fn ($q) => $q
+                ->when($filters['adset_id'], fn ($w) => $w->where('adset_id', $filters['adset_id']))
+                ->when($filters['campaign_id'] || $filters['center_id'], fn ($w) =>
+                    $w->whereIn('adset_id', $campaignScope(Adset::query(), 'campaign_id')->select('id'))))
             ->withCount([
-                'leads as leads_count' => fn ($q) => $q->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()]),
-                'leads as won_count'   => fn ($q) => $q
-                    ->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
-                    ->where('status', 'won'),
+                'leads as leads_count' => $leadFilters,
+                'leads as won_count'   => fn ($q) => $leadFilters($q)->where('status', 'won'),
             ])
             ->get()
             ->map(function ($row) use ($stats) {

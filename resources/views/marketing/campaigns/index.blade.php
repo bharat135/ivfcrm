@@ -38,7 +38,30 @@
             <option value="ARCHIVED">Archived</option>
         </select>
 
-        <input type="text" class="form-control form-control-sm w-auto" id="fRange" placeholder="Last 30 days">
+        <select class="form-select form-select-sm w-auto" id="fObjective">
+            <option value="">All objectives</option>
+            @foreach($objectives as $value => $label)
+                <option value="{{ $value }}">{{ $label }}</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fPlatform">
+            <option value="">All platforms</option>
+            <option value="meta">Meta</option>
+            <option value="google">Google Ads</option>
+            <option value="manual">Manual</option>
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fSource">
+            <option value="">All lead sources</option>
+            @foreach($sources as $source)
+                <option value="{{ $source->id }}">{{ $source->name }}</option>
+            @endforeach
+        </select>
+
+        <input type="text" class="form-control form-control-sm w-auto" id="fRange" placeholder="Last 30 days" title="Spend, impressions and clicks are summed for this period">
+
+        <button class="btn btn-sm btn-link text-decoration-none" id="fReset" title="Clear filters"><i class="bi bi-x-circle"></i></button>
 
         <button class="btn btn-sm btn-outline-secondary" id="btnSync"><i class="bi bi-arrow-repeat me-1"></i>Sync</button>
 
@@ -200,10 +223,11 @@ $(function () {
         altFormat: 'd-m-Y',
         dateFormat: 'Y-m-d',
         defaultDate: [@json(now()->subDays(30)->toDateString()), @json(now()->toDateString())],
-        onClose(dates) {
+        onClose(dates, _str, fp) {
             if (dates.length === 2) {
-                range.from = dates[0].toISOString().slice(0, 10);
-                range.to   = dates[1].toISOString().slice(0, 10);
+                // Format in local time: toISOString() shifts IST dates back a day.
+                range.from = fp.formatDate(dates[0], 'Y-m-d');
+                range.to   = fp.formatDate(dates[1], 'Y-m-d');
                 table.ajax.reload();
             }
         },
@@ -216,10 +240,13 @@ $(function () {
         ajax: {
             url: @json(route('marketing.campaigns.index')),
             data: d => {
-                d.center_id = $('#fCenter').val();
-                d.status    = $('#fStatus').val();
-                d.from      = range.from;
-                d.to        = range.to;
+                d.center_id      = $('#fCenter').val();
+                d.status         = $('#fStatus').val();
+                d.objective      = $('#fObjective').val();
+                d.platform       = $('#fPlatform').val();
+                d.lead_source_id = $('#fSource').val();
+                d.from           = range.from;
+                d.to             = range.to;
             },
         },
         columns: [
@@ -237,7 +264,13 @@ $(function () {
         ],
     });
 
-    $('#fCenter, #fStatus').on('change', () => table.ajax.reload());
+    $('#fCenter, #fStatus, #fObjective, #fPlatform, #fSource').on('change', () => table.ajax.reload());
+    $('#fReset').on('click', () => {
+        $('#fCenter, #fStatus, #fObjective, #fPlatform, #fSource').val('');
+        range = { from: null, to: null };
+        document.getElementById('fRange')._flatpickr?.setDate([@json(now()->subDays(30)->toDateString()), @json(now()->toDateString())], false);
+        table.ajax.reload();
+    });
 
     // --- Create / edit ---------------------------------------------------
     $('#btnNew').on('click', function () {

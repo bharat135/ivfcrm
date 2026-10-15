@@ -72,12 +72,21 @@
     <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
         <span class="fw-semibold me-auto"><i class="bi bi-ui-checks-grid me-2"></i>Flows</span>
 
+        <select class="form-select form-select-sm w-auto" id="fPurpose">
+            <option value="">All purposes</option>
+            @foreach($starters as $key => $starter)
+                <option value="{{ $key }}">{{ $starter['label'] ?? $key }}</option>
+            @endforeach
+        </select>
+
         <select class="form-select form-select-sm w-auto" id="fStatus">
             <option value="">All statuses</option>
             <option value="DRAFT">Draft</option>
             <option value="PUBLISHED">Published</option>
             <option value="DEPRECATED">Deprecated</option>
         </select>
+
+        <button class="btn btn-sm btn-link text-decoration-none" id="fReset" title="Clear filters"><i class="bi bi-x-circle"></i></button>
 
         <button class="btn btn-sm btn-outline-secondary" id="btnSync"><i class="bi bi-arrow-repeat"></i>Sync</button>
 
@@ -227,7 +236,7 @@ $(function () {
         order: [[0, 'desc']],
         ajax: {
             url: @json(route('marketing.flows.index')),
-            data: d => { d.status = $('#fStatus').val(); },
+            data: d => { d.status = $('#fStatus').val(); d.purpose = $('#fPurpose').val(); },
         },
         columns: [
             { data: 'name' },
@@ -241,7 +250,8 @@ $(function () {
         language: { emptyTable: FUI.emptyState('bi-ui-checks-grid', 'No flows yet', 'Create one to collect answers inside WhatsApp.') },
     });
 
-    $('#fStatus').on('change', () => table.ajax.reload());
+    $('#fStatus, #fPurpose').on('change', () => table.ajax.reload());
+    $('#fReset').on('click', () => { $('#fStatus, #fPurpose').val(''); table.ajax.reload(); });
 
     // --- Create ---------------------------------------------------------
     $('#btnNew').on('click', function () {

@@ -49,7 +49,9 @@ class MetaCampaignController extends Controller
                 ->withCount(['leads', 'adsets'])
                 ->when($request->filled('center_id'), fn ($q) => $q->where('center_id', $request->integer('center_id')))
                 ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
-                ->when($request->filled('platform'), fn ($q) => $q->where('platform', $request->string('platform')));
+                ->when($request->filled('platform'), fn ($q) => $q->where('platform', $request->string('platform')))
+                ->when($request->filled('objective'), fn ($q) => $q->where('objective', $request->string('objective')))
+                ->when($request->filled('lead_source_id'), fn ($q) => $q->where('lead_source_id', $request->integer('lead_source_id')));
 
             return DataTables::of($query)
                 ->addColumn('status_badge', fn (Campaign $c) =>

@@ -131,6 +131,10 @@ return [
         // How far back a form's submissions are pulled the first time it is
         // polled (and by "Pull leads"). Later pulls continue from the watermark.
         'backfill_days' => (int) env('META_LEADS_BACKFILL_DAYS', 90),
+        // Submissions Meta timestamps before this moment are never imported
+        // (webhook or poll). Set after a data clear so the backfill does not
+        // recreate the leads that were deliberately removed.
+        'ignore_before' => env('META_LEADS_IGNORE_BEFORE'),
     ],
 
     // Funnel stage slugs used by the Lead -> Visit -> Booking report.

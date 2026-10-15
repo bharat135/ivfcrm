@@ -55,6 +55,21 @@
             @endforeach
         </select>
 
+        <select class="form-select form-select-sm w-auto" id="fLanguage">
+            <option value="">All languages</option>
+            @foreach(\App\Models\WhatsappTemplate::query()->select('language')->distinct()->orderBy('language')->pluck('language') as $lang)
+                <option value="{{ $lang }}">{{ $languages[$lang] ?? $lang }}</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fVariables">
+            <option value="">With or without variables</option>
+            <option value="1">Has variables</option>
+            <option value="0">No variables</option>
+        </select>
+
+        <button class="btn btn-sm btn-link text-decoration-none" id="fReset" title="Clear filters"><i class="bi bi-x-circle"></i></button>
+
         <button class="btn btn-sm btn-outline-secondary" id="btnSync"><i class="bi bi-arrow-repeat me-1"></i>Sync</button>
 
         @can('whatsapp_templates.create')
@@ -233,9 +248,11 @@ $(function () {
         ajax: {
             url: @json(route('marketing.templates.index')),
             data: d => {
-                d.source   = $('#fSource').val();
-                d.status   = $('#fStatus').val();
-                d.category = $('#fCategory').val();
+                d.source        = $('#fSource').val();
+                d.status        = $('#fStatus').val();
+                d.category      = $('#fCategory').val();
+                d.language      = $('#fLanguage').val();
+                d.has_variables = $('#fVariables').val();
             },
         },
         columns: [
@@ -250,7 +267,11 @@ $(function () {
         ],
     });
 
-    $('#fSource, #fStatus, #fCategory').on('change', () => table.ajax.reload());
+    $('#fSource, #fStatus, #fCategory, #fLanguage, #fVariables').on('change', () => table.ajax.reload());
+    $('#fReset').on('click', () => {
+        $('#fStatus, #fCategory, #fLanguage, #fVariables').val('');
+        table.ajax.reload();
+    });
 
     // The account Sync / New template act on: the selected provider, or the
     // default one when "All providers" is selected.

@@ -31,11 +31,30 @@
             @endforeach
         </select>
 
+        <select class="form-select form-select-sm w-auto" id="fCenter">
+            <option value="">All centres</option>
+            @foreach($centers as $center)
+                <option value="{{ $center->id }}">{{ $center->name }}</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fObjective">
+            <option value="">All objectives</option>
+            @foreach($objectives as $value => $label)
+                <option value="{{ $value }}">{{ $label }}</option>
+            @endforeach
+        </select>
+
         <select class="form-select form-select-sm w-auto" id="fStatus">
             <option value="">All statuses</option>
             <option value="ACTIVE">Active</option>
             <option value="PAUSED">Paused</option>
+            <option value="ARCHIVED">Archived</option>
         </select>
+
+        <input type="text" class="form-control form-control-sm w-auto" id="fRange" placeholder="Last 30 days" title="Spend is summed for this period">
+
+        <button class="btn btn-sm btn-link text-decoration-none" id="fReset" title="Clear filters"><i class="bi bi-x-circle"></i></button>
 
         @can('campaigns.create')
             <button class="btn btn-sm btn-primary" id="btnNew"><i class="bi bi-plus-lg me-1"></i>New ad set</button>
@@ -70,6 +89,20 @@
 @push('scripts')
 <script>
 $(function () {
+    let range = { from: null, to: null };
+
+    flatpickr('#fRange', {
+        mode: 'range', altInput: true, altFormat: 'd-m-Y', dateFormat: 'Y-m-d',
+        defaultDate: [@json(now()->subDays(30)->toDateString()), @json(now()->toDateString())],
+        onClose(dates, _str, fp) {
+            if (dates.length === 2) {
+                range.from = fp.formatDate(dates[0], 'Y-m-d');
+                range.to   = fp.formatDate(dates[1], 'Y-m-d');
+                table.ajax.reload();
+            }
+        },
+    });
+
     const table = $('#adsetTable').DataTable({
         processing: true,
         serverSide: true,
@@ -78,7 +111,11 @@ $(function () {
             url: @json(route('marketing.adsets.index')),
             data: d => {
                 d.campaign_id = $('#fCampaign').val();
+                d.center_id   = $('#fCenter').val();
+                d.objective   = $('#fObjective').val();
                 d.status      = $('#fStatus').val();
+                d.from        = range.from;
+                d.to          = range.to;
             },
         },
         columns: [
@@ -95,7 +132,13 @@ $(function () {
         ],
     });
 
-    $('#fCampaign, #fStatus').on('change', () => table.ajax.reload());
+    $('#fCampaign, #fCenter, #fObjective, #fStatus').on('change', () => table.ajax.reload());
+    $('#fReset').on('click', () => {
+        $('#fCampaign, #fCenter, #fObjective, #fStatus').val('');
+        range = { from: null, to: null };
+        document.getElementById('fRange')._flatpickr?.setDate([@json(now()->subDays(30)->toDateString()), @json(now()->toDateString())], false);
+        table.ajax.reload();
+    });
 
     $('#btnNew').on('click', function () {
         $('#adsetForm')[0].reset();

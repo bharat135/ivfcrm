@@ -38,7 +38,10 @@ class WhatsappTemplateController extends Controller
                 ->when($source === 'shared', fn ($q) => $q->whereNull('channel_account_id'))
                 ->when(ctype_digit($source), fn ($q) => $q->where('channel_account_id', (int) $source))
                 ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
-                ->when($request->filled('category'), fn ($q) => $q->where('category', $request->string('category')));
+                ->when($request->filled('category'), fn ($q) => $q->where('category', $request->string('category')))
+                ->when($request->filled('language'), fn ($q) => $q->where('language', $request->string('language')))
+                ->when($request->filled('has_variables'), fn ($q) => $request->boolean('has_variables')
+                    ? $q->where('variable_count', '>', 0) : $q->where('variable_count', 0));
 
             return DataTables::of($query)
                 ->addColumn('provider', fn (WhatsappTemplate $t) => $this->providerBadge($t->channelAccount))

@@ -31,8 +31,11 @@ class MetaAdsetController extends Controller
     public function index(Request $request)
     {
         if ($request->ajax() || $request->wantsJson()) {
+            $from = $request->date('from') ?: now()->subDays(30);
+            $to   = $request->date('to') ?: now();
+
             $stats = MetaInsight::where('level', 'adset')
-                ->where('date', '>=', now()->subDays(30))
+                ->whereBetween('date', [$from, $to])
                 ->selectRaw('entity_id, SUM(spend) spend, SUM(impressions) impressions, SUM(clicks) clicks')
                 ->groupBy('entity_id')
                 ->get()
@@ -41,6 +44,10 @@ class MetaAdsetController extends Controller
             $query = Adset::with('campaign:id,name')
                 ->withCount(['ads', 'leads'])
                 ->when($request->filled('campaign_id'), fn ($q) => $q->where('campaign_id', $request->integer('campaign_id')))
+                ->when($request->filled('center_id'), fn ($q) =>
+                    $q->whereHas('campaign', fn ($c) => $c->where('center_id', $request->integer('center_id'))))
+                ->when($request->filled('objective'), fn ($q) =>
+                    $q->whereHas('campaign', fn ($c) => $c->where('objective', $request->string('objective'))))
                 ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')));
 
             return DataTables::of($query)
@@ -59,6 +66,8 @@ class MetaAdsetController extends Controller
 
         return view('marketing.adsets.index', [
             'campaigns'         => Campaign::orderByDesc('id')->get(['id', 'name']),
+            'centers'           => \App\Models\Center::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'objectives'        => config('meta.ads.objectives'),
             'optimizationGoals' => config('meta.ads.optimization_goals'),
             'billingEvents'     => config('meta.ads.billing_events'),
             'destinationTypes'  => config('meta.ads.destination_types'),

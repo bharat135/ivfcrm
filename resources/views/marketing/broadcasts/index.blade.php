@@ -19,8 +19,43 @@
 </div>
 
 <div class="card shadow-sm">
-    <div class="card-header bg-white d-flex align-items-center gap-2">
+    <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
         <span class="fw-semibold me-auto"><i class="bi bi-megaphone me-2"></i>Broadcasts</span>
+
+        <select class="form-select form-select-sm w-auto" id="fStatus">
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="running">Running</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="failed">Failed</option>
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fTemplate">
+            <option value="">All templates</option>
+            @foreach($templates as $template)
+                <option value="{{ $template->id }}">{{ $template->name }} ({{ $template->language }})</option>
+            @endforeach
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fAudience">
+            <option value="">Leads and patients</option>
+            <option value="leads">Leads</option>
+            <option value="patients">Patients</option>
+        </select>
+
+        <select class="form-select form-select-sm w-auto" id="fCenter">
+            <option value="">All centres</option>
+            @foreach($centers as $center)
+                <option value="{{ $center->id }}">{{ $center->name }}</option>
+            @endforeach
+        </select>
+
+        <input type="text" class="form-control form-control-sm w-auto" id="fRange" placeholder="Created: any time">
+
+        <button class="btn btn-sm btn-link text-decoration-none" id="fReset" title="Clear filters"><i class="bi bi-x-circle"></i></button>
+
         @can('broadcasts.create')
             <button class="btn btn-sm btn-primary" id="btnNew"><i class="bi bi-plus-lg me-1"></i>New broadcast</button>
         @endcan
@@ -183,11 +218,32 @@
 $(function () {
     const personalisation = @json($leadFields);
 
+    let range = { from: null, to: null };
+
+    flatpickr('#fRange', {
+        mode: 'range', altInput: true, altFormat: 'd-m-Y', dateFormat: 'Y-m-d',
+        onClose(dates, _str, fp) {
+            range.from = dates[0] ? fp.formatDate(dates[0], 'Y-m-d') : null;
+            range.to   = dates[1] ? fp.formatDate(dates[1], 'Y-m-d') : null;
+            table.ajax.reload();
+        },
+    });
+
     const table = $('#broadcastTable').DataTable({
         processing: true,
         serverSide: true,
         order: [[5, 'desc']],
-        ajax: @json(route('marketing.broadcasts.index')),
+        ajax: {
+            url: @json(route('marketing.broadcasts.index')),
+            data: d => {
+                d.status               = $('#fStatus').val();
+                d.whatsapp_template_id = $('#fTemplate').val();
+                d.audience_type        = $('#fAudience').val();
+                d.center_id            = $('#fCenter').val();
+                d.from                 = range.from;
+                d.to                   = range.to;
+            },
+        },
         columns: [
             { data: 'name' },
             { data: 'template.name', defaultContent: '—' },
@@ -197,6 +253,14 @@ $(function () {
             { data: 'created_at', render: d => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' },
             { data: 'action', orderable: false, searchable: false },
         ],
+    });
+
+    $('#fStatus, #fTemplate, #fAudience, #fCenter').on('change', () => table.ajax.reload());
+    $('#fReset').on('click', () => {
+        $('#fStatus, #fTemplate, #fAudience, #fCenter').val('');
+        range = { from: null, to: null };
+        document.getElementById('fRange')._flatpickr?.clear();
+        table.ajax.reload();
     });
 
     $('#btnNew').on('click', function () {
