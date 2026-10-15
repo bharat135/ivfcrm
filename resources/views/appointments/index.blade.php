@@ -20,9 +20,10 @@
             <table class="table table-hover table-sm mb-0" id="appointmentTable" style="width:100%">
                 <thead class="table-light">
                     <tr>
-                        <th>Patient</th><th>Mobile</th><th>Doctor</th>
-                        <th>Date</th><th>Slot</th><th>Type</th>
-                        <th>Status</th><th>Center</th><th width="80">Actions</th>
+                        {{-- Secondary columns are hidden on phones so the table fits the screen. --}}
+                        <th>Patient</th><th class="d-none d-md-table-cell">Mobile</th><th>Doctor</th>
+                        <th>Date</th><th class="d-none d-md-table-cell">Slot</th><th class="d-none d-lg-table-cell">Type</th>
+                        <th>Status</th><th class="d-none d-lg-table-cell">Center</th><th width="80">Actions</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -136,16 +137,17 @@ const table = $('#appointmentTable').DataTable({
     ajax: '{{ route("appointments.index") }}',
     columns: [
         { data: 'patient.wife_name', defaultContent: '—' },
-        { data: 'patient.mobile', defaultContent: '—' },
+        { data: 'patient.mobile', defaultContent: '—', className: 'd-none d-md-table-cell' },
         { data: 'doctor.name', defaultContent: '—', render: d => d ? 'Dr. ' + d : '—' },
-        { data: 'scheduled_at', render: d => FUI.date(d) },
-        { data: 'scheduled_at', render: d => FUI.time(d) },
-        { data: 'type', render: d => `<span class="badge bg-info text-dark">${d}</span>` },
+        // On phones the slot column is hidden, so the time rides with the date.
+        { data: 'scheduled_at', render: d => FUI.date(d) + '<span class="d-md-none d-block small text-muted">' + FUI.time(d) + '</span>' },
+        { data: 'scheduled_at', render: d => FUI.time(d), className: 'd-none d-md-table-cell' },
+        { data: 'type', render: d => `<span class="badge bg-info text-dark">${d}</span>`, className: 'd-none d-lg-table-cell' },
         { data: 'status', render: d => {
             const c = {booked:'primary',confirmed:'info',visited:'success',cancelled:'danger',no_show:'warning text-dark',rescheduled:'secondary'};
             return `<span class="badge bg-${c[d]||'secondary'}">${d}</span>`;
         }},
-        { data: 'center.code', defaultContent: '—' },
+        { data: 'center.code', defaultContent: '—', className: 'd-none d-lg-table-cell' },
         { data: null, orderable: false, render: (d, t, row) =>
             `<a href="#" class="btn btn-xs btn-outline-primary"><i class="bi bi-eye"></i></a>` }
     ],

@@ -61,7 +61,9 @@
                 </div>
             </div>
 
-            <div class="d-flex align-items-center gap-2">
+            {{-- flex-wrap: on a phone the four buttons must fold onto a second
+                 line instead of forcing the whole page wider than the screen. --}}
+            <div class="d-flex align-items-center gap-2 flex-wrap profile-actions">
                 @include('telephony._call_button', [
                     'number'       => $patient->mobile,
                     'leadId'       => $lead?->id,

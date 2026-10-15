@@ -425,6 +425,27 @@ hr { border-color: var(--fui-border-subtle); opacity: 1; }
     #topbar { left: 0; padding: 0 12px; }
 }
 
+/* Phones: the top bar shows only the current page, the quick search gives up
+   width, tab strips scroll sideways instead of stacking, and nothing in the
+   content may force the page wider than the screen. */
+@media (max-width: 767.98px) {
+    #topbar .breadcrumb { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+    #topbar .breadcrumb-item { min-width: 0; }
+    #topbar .breadcrumb-item:not(.active) { display: none; }
+    #topbar .breadcrumb-item.active { overflow: hidden; text-overflow: ellipsis; }
+    #topbar .breadcrumb-item.active::before { display: none; padding: 0; }
+    #navSearchWrap .input-group { width: 132px !important; }
+    #navSearchWrap .dropdown-menu { min-width: 240px !important; }
+
+    .profile-tabs { flex-wrap: nowrap; gap: 16px; }
+    .profile-tabs .nav-link { white-space: nowrap; }
+    .profile-actions .btn { padding-left: 8px; padding-right: 8px; }
+
+    /* An empty-state message inside a horizontally scrolling table stays
+       inside the visible width rather than being clipped off-screen. */
+    .table-responsive td.dataTables_empty .fui-empty { max-width: calc(100vw - 60px); margin: 0 auto; padding: 28px 12px; }
+}
+
 /* --------------------------------------------------------------------------
    5. Buttons
    Frappe UI: solid = near-black, subtle = gray fill, outline = hairline ring,
