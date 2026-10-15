@@ -68,8 +68,10 @@ if ! apt-cache show php${PHP_VERSION}-fpm >/dev/null 2>&1; then
   echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list
   apt-get update -q
 fi
+# cron is not preinstalled on minimal 26.04 images; without it the Laravel
+# scheduler (lead assignment, reminders, Meta/Tata syncs) silently never runs.
 apt-get install -y -q \
-  nginx mysql-server redis-server certbot rsync unzip git ufw \
+  nginx mysql-server redis-server certbot rsync unzip git ufw cron \
   php${PHP_VERSION}-fpm php${PHP_VERSION}-cli php${PHP_VERSION}-mysql php${PHP_VERSION}-mbstring php${PHP_VERSION}-xml php${PHP_VERSION}-curl \
   php${PHP_VERSION}-zip php${PHP_VERSION}-gd php${PHP_VERSION}-intl php${PHP_VERSION}-bcmath php${PHP_VERSION}-redis php${PHP_VERSION}-gmp \
   php${PHP_VERSION}-opcache php${PHP_VERSION}-readline >/dev/null
@@ -78,7 +80,7 @@ echo "==> php.ini"
 for ini in /etc/php/${PHP_VERSION}/fpm/php.ini /etc/php/${PHP_VERSION}/cli/php.ini; do
   sed -i -E 's/^;?upload_max_filesize = .*/upload_max_filesize = 32M/; s/^;?post_max_size = .*/post_max_size = 32M/; s/^;?memory_limit = .*/memory_limit = 512M/; s/^;?max_execution_time = .*/max_execution_time = 300/; s/^;?date.timezone =.*/date.timezone = Asia\/Kolkata/' "$ini"
 done
-systemctl enable --now php${PHP_VERSION}-fpm redis-server mysql nginx >/dev/null
+systemctl enable --now php${PHP_VERSION}-fpm redis-server mysql nginx cron >/dev/null
 systemctl restart php${PHP_VERSION}-fpm
 
 echo "==> mysql database $DB_NAME / user $DB_USER"
