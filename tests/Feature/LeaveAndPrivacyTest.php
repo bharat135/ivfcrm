@@ -222,6 +222,12 @@ class LeaveAndPrivacyTest extends TestCase
         $this->assertSame($target->id, $lead->fresh()->patient->center_id);
         $this->assertDatabaseHas('lead_activities', ['lead_id' => $lead->id, 'title' => 'Centre changed to ' . $target->name, 'user_id' => $this->telecaller->id]);
 
-        $this->actingAs($this->colleague)->patchJson(route('leads.center', $lead), ['center_id' => $target->id])->assertForbidden();
+        // Telecallers edit any patient, so a colleague may move it too; a role
+        // without lead editing may not.
+        $this->actingAs($this->colleague)->patchJson(route('leads.center', $lead), ['center_id' => $lead->center_id])->assertOk();
+
+        $receptionist = User::factory()->create(['is_active' => true, 'center_id' => $this->telecaller->center_id]);
+        $receptionist->assignRole('Receptionist');
+        $this->actingAs($receptionist)->patchJson(route('leads.center', $lead), ['center_id' => $target->id])->assertForbidden();
     }
 }

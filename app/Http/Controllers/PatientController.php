@@ -256,6 +256,8 @@ class PatientController extends Controller
 
     public function update(Request $request, Patient $patient)
     {
+        abort_unless(Auth::user()->can('patients.edit'), 403);
+
         $data = $request->validate([
             'wife_name'                   => ['nullable', 'string', 'max:191'],
             'husband_name'                => ['nullable', 'string', 'max:191'],
@@ -295,6 +297,8 @@ class PatientController extends Controller
      */
     public function advance(Request $request, Patient $patient)
     {
+        abort_unless(Auth::user()->can('patients.edit'), 403);
+
         $data = $request->validate([
             'stage' => ['required', 'string', 'in:' . implode(',', array_keys(PatientJourney::options()))],
         ]);

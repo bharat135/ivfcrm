@@ -106,7 +106,7 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
             'Telecaller' => [
                 'leaves.view', // no view_mobile_numbers: numbers are masked for telecallers
-                'leads.view', 'leads.create', 'leads.edit', 'followups.*', 'call_logs.*',
+                'leads.view', 'leads.create', 'leads.edit', 'patients.view', 'patients.edit', 'followups.*', 'call_logs.*',
                 'appointments.view', 'appointments.create',
                 'conversations.view', 'conversations.create', 'conversations.edit',
                 'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
@@ -115,7 +115,7 @@ class RolesAndPermissionsSeeder extends Seeder
             // Everything a Telecaller has, plus the audit extras of the role.
             'Call Quality Analyst' => [
                 'leaves.view',
-                'leads.view', 'leads.create', 'leads.edit', 'followups.*', 'call_logs.*',
+                'leads.view', 'leads.create', 'leads.edit', 'patients.view', 'patients.edit', 'followups.*', 'call_logs.*',
                 'appointments.view', 'appointments.create',
                 'conversations.view', 'conversations.create', 'conversations.edit',
                 'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',

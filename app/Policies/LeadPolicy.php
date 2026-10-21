@@ -28,6 +28,11 @@ class LeadPolicy
         if ($user->hasRole(['Super Admin', 'Management', 'Center Manager'])) {
             return true;
         }
+        // Telecallers with patient editing work on any patient, not only their own
+        if ($user->hasRole(['Telecaller', 'Call Quality Analyst'])
+            && $user->can('leads.edit') && $user->can('patients.edit')) {
+            return true;
+        }
         return $lead->assigned_to === $user->id && $user->can('leads.edit');
     }
 
