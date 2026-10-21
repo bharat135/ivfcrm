@@ -16,9 +16,11 @@
         </p>
     </div>
     <div class="d-flex gap-2">
-        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#importModal">
-            <i class="bi bi-upload me-1"></i> Import CSV
-        </button>
+        @can('lead_imports.create')
+        <a href="{{ route('imports.create') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-upload me-1"></i> Import CSV / Excel
+        </a>
+        @endcan
         @can('leads.create')
         <a href="{{ route('leads.create') }}" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-lg me-1"></i> New Lead
@@ -153,32 +155,6 @@
     </div>
 </div>
 
-<!-- Import Modal -->
-<div class="modal fade" id="importModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h6 class="modal-title">Import Leads via CSV</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted small">Upload a CSV file with columns: name, mobile, email, city, state, source, campaign, remark</p>
-                <input type="file" class="form-control" id="csvFile" accept=".csv,.xlsx">
-                <div class="mt-2">
-                    <label class="form-label small fw-semibold">Duplicate Strategy</label>
-                    <select class="form-select form-select-sm">
-                        <option value="ignore">Ignore Duplicates</option>
-                        <option value="merge">Merge Duplicates</option>
-                        <option value="create">Create New</option>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary btn-sm">Upload & Process</button>
-            </div>
-        </div>
-    </div>
-</div>
 @endsection
 
 @push('scripts')

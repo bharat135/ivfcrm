@@ -6,7 +6,7 @@
 <div class="container-fluid">
 
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0">Import Leads from CSV</h4>
+        <h4 class="mb-0">Import Leads from CSV / Excel</h4>
         <div class="d-flex gap-2">
             <a href="{{ route('imports.sample') }}" class="btn btn-sm btn-outline-success">
                 <i class="bi bi-download me-1"></i> Download Sample CSV
@@ -23,20 +23,20 @@
         <div class="col-lg-7">
             <div class="card shadow-sm">
                 <div class="card-header py-2">
-                    <strong>Upload CSV File</strong>
+                    <strong>Upload File</strong>
                 </div>
                 <div class="card-body">
                     <form method="POST" action="{{ route('imports.store') }}" enctype="multipart/form-data" id="importForm">
                         @csrf
 
                         <div class="mb-3">
-                            <label class="form-label">CSV File <span class="text-danger">*</span></label>
+                            <label class="form-label">CSV or Excel File <span class="text-danger">*</span></label>
                             <input type="file" name="csv_file" id="csvFile" class="form-control @error('csv_file') is-invalid @enderror"
-                                   accept=".csv,.txt" required>
+                                   accept=".csv,.txt,.xlsx,.xls" required>
                             @error('csv_file')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
-                            <div class="form-text">Max 20 MB · UTF-8 encoded · First row must be column headers</div>
+                            <div class="form-text">Max 20 MB · .csv, .xlsx or .xls · First row must be column headers</div>
                         </div>
 
                         <div class="mb-3">
@@ -52,7 +52,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">Default Lead Source <small class="text-muted">(used when CSV row has no source)</small></label>
+                            <label class="form-label">Default Lead Source <small class="text-muted">(used when a row has no source)</small></label>
                             <select name="default_source_id" class="form-select">
                                 <option value="">— None —</option>
                                 @foreach($sources as $s)
@@ -91,7 +91,7 @@
         <div class="col-lg-5">
             <div class="card shadow-sm border-info">
                 <div class="card-header py-2 bg-info bg-opacity-10">
-                    <strong><i class="bi bi-info-circle me-1"></i>CSV Format Guide</strong>
+                    <strong><i class="bi bi-info-circle me-1"></i>File Format Guide</strong>
                 </div>
                 <div class="card-body small">
                     <p class="mb-2">Download the <a href="{{ route('imports.sample') }}" class="fw-semibold">sample CSV</a> to see the exact format expected.</p>
@@ -101,8 +101,8 @@
                             <tr><th>Column</th><th>Required</th><th>Notes</th></tr>
                         </thead>
                         <tbody>
-                            <tr><td><code>name</code></td>       <td><span class="badge bg-danger">Yes</span></td><td>Lead's full name</td></tr>
-                            <tr><td><code>mobile</code></td>     <td><span class="badge bg-danger">Yes</span></td><td>7–15 digits</td></tr>
+                            <tr><td><code>name</code></td>       <td>No</td><td>Lead's full name ("Unknown" when blank)</td></tr>
+                            <tr><td><code>mobile</code></td>     <td><span class="badge bg-danger">Yes</span></td><td>7–15 digits (also read from <code>phone</code>, <code>mobile no</code>, <code>contact</code>)</td></tr>
                             <tr><td><code>alt_mobile</code></td> <td>No</td><td>Alternate number</td></tr>
                             <tr><td><code>email</code></td>      <td>No</td><td>Email address</td></tr>
                             <tr><td><code>gender</code></td>     <td>No</td><td>male / female / other</td></tr>
@@ -112,9 +112,12 @@
                             <tr><td><code>pincode</code></td>    <td>No</td><td>6-digit PIN</td></tr>
                             <tr><td><code>source</code></td>     <td>No</td><td>Lead source name</td></tr>
                             <tr><td><code>remark</code></td>     <td>No</td><td>Any notes</td></tr>
-                            <tr><td><code>lead_date</code></td>  <td>No</td><td>YYYY-MM-DD</td></tr>
+                            <tr><td><code>lead_date</code></td>  <td>No</td><td>DD-MM-YYYY, DD/MM/YYYY or YYYY-MM-DD (also read from <code>date</code>)</td></tr>
                         </tbody>
                     </table>
+
+                    <p class="mb-2">Comma- or tab-separated files in any encoding work, as do Excel workbooks (first sheet).
+                        Columns with no matching field, such as dispositions or call notes, are added to the lead's remark.</p>
 
                     <div class="alert alert-warning py-2 mb-0 small">
                         <i class="bi bi-exclamation-triangle me-1"></i>
@@ -140,7 +143,7 @@ $('#importForm').on('submit', function () {
 // Preview filename
 $('#csvFile').on('change', function () {
     const name = this.files[0]?.name ?? '';
-    $(this).next('.form-text').text(name ? `Selected: ${name}` : 'Max 20 MB · UTF-8 encoded · First row must be column headers');
+    $(this).next('.form-text').text(name ? `Selected: ${name}` : 'Max 20 MB · .csv, .xlsx or .xls · First row must be column headers');
 });
 </script>
 @endpush
