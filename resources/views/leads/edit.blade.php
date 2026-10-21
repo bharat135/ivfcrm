@@ -28,18 +28,18 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold">Mobile <span class="text-danger">*</span></label>
-                    {{-- A readonly (masked) field is exempt from the pattern check by the browser, so telecallers can still save. --}}
+                    {{-- A masked number is shown disabled, so it is not sent and the saved number is left alone. --}}
                     @php $canEditNumbers = \App\Support\PhoneNumber::canView(); @endphp
-                    <input type="tel" name="mobile" class="form-control @error('mobile') is-invalid @enderror" value="{{ old('mobile', \App\Support\PhoneNumber::display($lead->mobile)) }}" required
-                           @if($canEditNumbers) data-mobile10 inputmode="numeric" maxlength="10" pattern="[6-9][0-9]{9}" title="10-digit Indian mobile number, without +91 or 0"
-                           @else readonly title="Number hidden" @endif>
+                    <input type="tel" name="mobile" class="form-control @error('mobile') is-invalid @enderror" value="{{ old('mobile', \App\Support\PhoneNumber::display($lead->mobile)) }}"
+                           @if($canEditNumbers) required data-mobile10 inputmode="numeric" maxlength="10" pattern="[6-9][0-9]{9}" title="10-digit Indian mobile number, without +91 or 0"
+                           @else disabled title="Number hidden — it cannot be changed here" @endif>
                     @error('mobile')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold">Alt Mobile</label>
                     <input type="tel" name="alt_mobile" class="form-control @error('alt_mobile') is-invalid @enderror" value="{{ old('alt_mobile', \App\Support\PhoneNumber::display($lead->alt_mobile)) }}"
                            @if($canEditNumbers) data-mobile10 inputmode="numeric" maxlength="10" pattern="[6-9][0-9]{9}" title="10-digit Indian mobile number, without +91 or 0"
-                           @else readonly title="Number hidden" @endif>
+                           @else disabled title="Number hidden — it cannot be changed here" @endif>
                     @error('alt_mobile')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
                 <div class="col-md-4">

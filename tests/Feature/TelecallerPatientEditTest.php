@@ -53,6 +53,27 @@ class TelecallerPatientEditTest extends TestCase
         $this->actingAs($telecaller)->get(route('patients.index'))->assertOk();
     }
 
+    public function test_a_telecaller_saving_a_lead_with_the_masked_number_keeps_the_real_one(): void
+    {
+        $telecaller = $this->userWithRole('Telecaller');
+        [$lead] = $this->someoneElsesPatient();
+        $real = $lead->mobile;
+
+        $this->actingAs($telecaller)->get(route('leads.edit', $lead))->assertOk()
+            ->assertSee('disabled title="Number hidden', false);
+
+        // What a form posted before the fields were disabled sent back
+        $this->actingAs($telecaller)->put(route('leads.update', $lead), [
+            'name'       => 'Renamed Couple',
+            'mobile'     => \App\Support\PhoneNumber::mask($real),
+            'alt_mobile' => '98XXXXXX11',
+        ])->assertSessionHasNoErrors()->assertRedirect(route('leads.show', $lead));
+
+        $lead->refresh();
+        $this->assertSame('Renamed Couple', $lead->name);
+        $this->assertSame($real, $lead->mobile);
+    }
+
     public function test_a_role_without_patient_editing_cannot_change_a_patient(): void
     {
         $receptionist = $this->userWithRole('Receptionist');

@@ -8,6 +8,18 @@ class StoreLeadRequest extends FormRequest
 {
     public function authorize(): bool { return true; }
 
+    /**
+     * Telecallers see a masked number ("98XXXXXX10"), so on an edit the
+     * numbers they send back are not real ones; they are never updated.
+     */
+    protected function prepareForValidation(): void
+    {
+        if (($this->isMethod('PUT') || $this->isMethod('PATCH')) && ! \App\Support\PhoneNumber::canView()) {
+            $this->request->remove('mobile');
+            $this->request->remove('alt_mobile');
+        }
+    }
+
     public function rules(): array
     {
         return [
