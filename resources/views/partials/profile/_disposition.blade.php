@@ -33,12 +33,6 @@
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold" for="nextFollowUp">Next follow-up <span class="fw-normal text-muted">date &amp; time</span> <span class="text-danger" id="followUpRequired">*</span></label>
                     <input type="text" name="next_follow_up_at" id="nextFollowUp" class="form-control form-control-sm" placeholder="Pick date and time">
-                    <div class="d-flex flex-wrap gap-1 mt-1">
-                        <button type="button" class="btn btn-xs btn-outline-primary rounded-pill js-quick-followup" data-pick="1h">In 1 hour</button>
-                        <button type="button" class="btn btn-xs btn-outline-primary rounded-pill js-quick-followup" data-pick="eve">Today 5 PM</button>
-                        <button type="button" class="btn btn-xs btn-outline-primary rounded-pill js-quick-followup" data-pick="tmrw">Tomorrow 11 AM</button>
-                        <button type="button" class="btn btn-xs btn-outline-primary rounded-pill js-quick-followup" data-pick="3d">In 3 days</button>
-                    </div>
                 </div>
                 <div class="col-md-8">
                     <label class="form-label small fw-semibold d-flex justify-content-between align-items-center" for="remark">
@@ -97,18 +91,6 @@ function refreshDisposition() {
 
 $('#disposition').on('change', refreshDisposition);
 refreshDisposition();
-
-// One tap for the usual callback times; the picker stays for anything else.
-$('.js-quick-followup').on('click', function () {
-    const d = new Date();
-    switch ($(this).data('pick')) {
-        case '1h':   d.setHours(d.getHours() + 1); break;
-        case 'eve':  d.setHours(17, 0, 0, 0); break;
-        case 'tmrw': d.setDate(d.getDate() + 1); d.setHours(11, 0, 0, 0); break;
-        case '3d':   d.setDate(d.getDate() + 3); d.setHours(11, 0, 0, 0); break;
-    }
-    followUpPicker.setDate(d, true);
-});
 
 // Speech to text for the remark (browser speech recognition; Chrome and Edge).
 (function () {
