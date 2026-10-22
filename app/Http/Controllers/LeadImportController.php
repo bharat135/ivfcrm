@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Center;
 use App\Models\City;
 use App\Models\Lead;
+use App\Models\LeadActivity;
 use App\Models\LeadImport;
 use App\Models\LeadImportError;
 use App\Models\LeadSource;
@@ -279,7 +280,14 @@ class LeadImportController extends Controller
                         }
                         $duplicates++;
                     } else {
-                        Lead::create($leadData);
+                        $lead = Lead::create($leadData);
+                        LeadActivity::create([
+                            'lead_id'     => $lead->id,
+                            'user_id'     => auth()->id(),
+                            'type'        => 'system',
+                            'title'       => 'Lead created',
+                            'description' => 'Imported from "' . $import->original_filename . '"',
+                        ]);
                         $imported++;
                     }
 

@@ -1635,33 +1635,91 @@ table.dataTable > thead > tr > th.sorting_desc:last-child { padding-right: 14px;
 
 .profile-shell {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
-    gap: 0;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 24px;
     align-items: start;
 }
-.profile-main { min-width: 0; padding-right: 24px; }
+.profile-main { min-width: 0; order: 2; }
 
-/* The rail is a peer of the page, not a card — it is separated by a hairline
-   rather than a border box, the way Frappe UI does a detail pane. */
+/* The rail is the patient's record card, on the left of the work area: the
+   actions on top, then the facts that stay true whichever tab is open. */
 .profile-rail {
-    border-left: 1px solid var(--fui-border-subtle);
-    padding-left: 24px;
-    position: sticky;
-    top: calc(var(--topbar-height) + 16px);
+    order: 1;
+    border: 1px solid var(--fui-border);
+    border-radius: var(--fui-radius-lg);
+    background: var(--fui-surface);
+    box-shadow: var(--fui-shadow-xs);
+    padding: 16px 18px;
+}
+.rail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-bottom: 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--fui-border-subtle);
 }
 
 @media (max-width: 1199.98px) {
     .profile-shell { grid-template-columns: minmax(0, 1fr); }
-    .profile-main { padding-right: 0; }
-    .profile-rail {
-        border-left: 0;
-        border-top: 1px solid var(--fui-border-subtle);
-        padding-left: 0;
-        padding-top: 20px;
-        margin-top: 24px;
-        position: static;
-    }
+    /* On a phone the work comes first; the record card follows it. */
+    .profile-rail { order: 3; }
 }
+
+/* Log this call ------------------------------------------------------------ */
+.log-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 9px;
+    border-radius: var(--fui-radius);
+    background: var(--fui-surface-muted);
+    color: var(--fui-ink-muted);
+    font-size: var(--fui-text-xs);
+    white-space: nowrap;
+}
+.log-chip strong { font-weight: 500; color: var(--fui-ink); }
+.log-chip.is-due { background: var(--fui-amber-50); color: var(--fui-amber-700); }
+.log-chip.is-due strong { color: inherit; }
+
+/* Updates: one box per event -------------------------------------------- */
+.update-day-label {
+    font-size: var(--fui-text-xs);
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: var(--fui-ink-faint);
+    margin: 14px 0 8px;
+}
+.update-day:first-of-type .update-day-label { margin-top: 0; }
+.update-box {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    border: 1px solid var(--fui-border);
+    border-radius: var(--fui-radius-lg);
+    background: var(--fui-surface);
+    padding: 12px 14px;
+}
+.update-box + .update-box { margin-top: 10px; }
+.update-icon {
+    width: 32px; height: 32px;
+    flex: 0 0 32px;
+    border-radius: var(--fui-radius-lg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    background: var(--fui-surface-muted);
+    color: var(--fui-ink-muted);
+}
+.update-icon.is-call        { background: var(--fui-amber-50);  color: var(--fui-amber-700); }
+.update-icon.is-status      { background: var(--fui-blue-50);   color: var(--fui-blue-600); }
+.update-icon.is-appointment { background: var(--fui-green-50);  color: var(--fui-green-700); }
+.update-icon.is-followup    { background: var(--fui-green-50);  color: var(--fui-green-700); }
+.update-icon.is-assignment  { background: var(--fui-violet-50); color: var(--fui-violet-600); }
+.update-icon.is-whatsapp    { background: var(--fui-green-50);  color: var(--fui-green-700); }
 
 /* Identity ---------------------------------------------------------------- */
 .profile-identity { display: flex; align-items: center; gap: 12px; }

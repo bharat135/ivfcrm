@@ -46,7 +46,7 @@ class DispositionLogTest extends TestCase
         );
     }
 
-    public function test_the_profile_log_leaves_calls_to_the_calls_tab(): void
+    public function test_the_profile_updates_show_calls_dispositions_and_edits_as_boxes(): void
     {
         $admin = User::whereHas('roles', fn ($q) => $q->where('name', 'Super Admin'))->first();
         $lead  = Lead::create(['name' => 'Call Couple', 'mobile' => '98765' . random_int(10000, 99999), 'status' => 'new']);
@@ -55,7 +55,32 @@ class DispositionLogTest extends TestCase
         LeadActivity::create(['lead_id' => $lead->id, 'user_id' => $admin->id, 'type' => 'status', 'title' => 'Disposition added', 'description' => 'Ringing: no answer']);
 
         $this->actingAs($admin)->get(route('leads.show', $lead))->assertOk()
+            ->assertSee('Updates')
+            ->assertSee('update-box', false)
             ->assertSee('Disposition added')
-            ->assertDontSee('Outbound call');
+            ->assertSee('Outbound call')
+            // The log card opens with nothing chosen and no remark carried over.
+            ->assertSee('<option value="">Select</option>', false)
+            ->assertSee('Save and stay');
+    }
+
+    public function test_booking_an_appointment_is_logged_as_an_update(): void
+    {
+        $admin  = User::whereHas('roles', fn ($q) => $q->where('name', 'Super Admin'))->first();
+        $lead   = Lead::create(['name' => 'Booked Couple', 'mobile' => '98765' . random_int(10000, 99999), 'status' => 'new']);
+        $doctor = \App\Models\Doctor::first() ?? \App\Models\Doctor::create(['name' => 'Dr Log', 'code' => 'DL' . random_int(1000, 9999), 'is_active' => true]);
+
+        $this->actingAs($admin)->postJson(route('appointments.store'), [
+            'lead_id'      => $lead->id,
+            'doctor_id'    => $doctor->id,
+            'center_id'    => \App\Models\Center::value('id'),
+            'scheduled_at' => now()->addDay()->setTime(12, 0)->format('Y-m-d H:i:s'),
+            'type'         => 'consultation',
+        ])->assertOk();
+
+        $entry = LeadActivity::where('lead_id', $lead->id)->where('type', 'appointment')->first();
+        $this->assertNotNull($entry);
+        $this->assertSame('Appointment booked', $entry->title);
+        $this->assertStringContainsString('Dr. ' . $doctor->name, $entry->description);
     }
 }

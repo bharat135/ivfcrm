@@ -49,49 +49,8 @@
             @include('partials.profile._dial_session', ['lead' => $lead])
         @endif
 
-        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-            <div class="profile-identity">
-                <a href="{{ request()->routeIs('leads.*') ? route('leads.index') : route('patients.index') }}" class="profile-back" aria-label="Back to list">
-                    <i class="bi bi-chevron-left"></i>
-                </a>
-                <span class="fui-avatar">{{ strtoupper(Str::substr($patient->coupleName(), 0, 2)) }}</span>
-                <div class="min-w-0">
-                    <h1 class="profile-name text-truncate">{{ $patient->coupleName() }}</h1>
-                    <p class="profile-role text-truncate">{{ $subtitle }}</p>
-                </div>
-            </div>
-
-            {{-- flex-wrap: on a phone the four buttons must fold onto a second
-                 line instead of forcing the whole page wider than the screen. --}}
-            <div class="d-flex align-items-center gap-2 flex-wrap profile-actions">
-                @include('telephony._call_button', [
-                    'number'       => $patient->mobile,
-                    'leadId'       => $lead?->id,
-                    'patientId'    => $patient->id,
-                    'showWhatsApp' => true,
-                ])
-                @if(! empty($whatsappPanels) && auth()->user()->can('conversations.create'))
-                    {{-- Opens the Messages tab and focuses the composer: the
-                         message is sent from this screen, not the inbox. --}}
-                    <button type="button" class="btn btn-sm btn-outline-success" id="btnProfileWhatsApp" title="Send a WhatsApp message from here">
-                        <i class="bi bi-whatsapp me-1"></i>WhatsApp
-                    </button>
-                @endif
-                @can('call_logs.view')
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnRecordings" data-url="{{ route('patients.recordings', $patient) }}">
-                        <i class="bi bi-record-circle me-1"></i>Recordings
-                    </button>
-                @endcan
-                @can('followups.create')
-                    <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#addFollowUpModal">
-                        <i class="bi bi-plus-lg me-1"></i>Add New
-                    </button>
-                @endcan
-            </div>
-        </div>
-
         {{-- The one funnel, identical to the one on every other screen. --}}
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
             @include('partials._journey_stepper', ['patient' => $patient])
 
             @can('patients.edit')
@@ -125,7 +84,7 @@
                  record to perform. --}}
             <div class="tab-pane fade {{ $active === 'overview' ? 'show active' : '' }}" id="tabOverview" role="tabpanel">
                 @if($lead)
-                    @include('partials.profile._disposition', ['lead' => $lead, 'dispositions' => $dispositions])
+                    @include('partials.profile._disposition', ['lead' => $lead, 'dispositions' => $dispositions, 'latestCall' => $calls->first()])
                 @endif
 
                 @if(($sourceTouches ?? collect())->count() > 1)
@@ -150,25 +109,61 @@
                     </div>
                 @endif
 
-                <h6 class="fw-semibold small text-muted mb-3">Log <span class="fw-normal">— every disposition, owner change, edit and follow-up, with who and when. Calls are under the Calls tab.</span></h6>
                 @php
-                    $logIcons = ['call' => 'bi-telephone', 'assignment' => 'bi-person-check', 'status' => 'bi-flag', 'followup' => 'bi-calendar-check', 'whatsapp' => 'bi-whatsapp', 'system' => 'bi-gear'];
+                    $callsById     = $calls->keyBy('id');
+                    $updateIcons   = ['call' => 'bi-telephone-outbound', 'status' => 'bi-flag', 'appointment' => 'bi-calendar-check', 'assignment' => 'bi-person-check', 'followup' => 'bi-calendar-check', 'whatsapp' => 'bi-whatsapp', 'system' => 'bi-pencil'];
+                    $updateFilters = ['' => 'All', 'call' => 'Calls', 'status' => 'Dispositions', 'appointment' => 'Appointments', 'assignment' => 'Owner', 'system' => 'Edits'];
+                    $days          = $timeline->groupBy(fn ($e) => $e->created_at->toDateString());
                 @endphp
-                @forelse($timeline as $entry)
-                    <div class="d-flex gap-3 pb-3 timeline-row" data-type="{{ $entry->type }}">
-                        <div class="timeline-marker"><i class="bi {{ $logIcons[$entry->type] ?? 'bi-dot' }}"></i></div>
-                        <div class="flex-grow-1 min-w-0">
-                            <div class="d-flex justify-content-between gap-2">
-                                <strong class="small">{{ $entry->title }}</strong>
-                                <span class="text-muted small text-nowrap" title="{{ $entry->created_at->diffForHumans() }}">{{ $entry->created_at->format('d-m-Y h:i A') }}</span>
-                            </div>
-                            @if($entry->description)
-                                <div class="text-muted small">{{ $entry->description }}</div>
-                            @endif
-                            <div class="text-body-tertiary small">
-                                {{ $entry->user ? 'by ' . $entry->user->name : 'by system' }} · {{ $entry->created_at->diffForHumans() }}
-                            </div>
-                        </div>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <h6 class="mb-0 fw-semibold">Updates <span class="fw-normal small text-muted">— calls, dispositions, appointments, owner changes and edits, newest first</span></h6>
+                    <div class="d-flex gap-1 flex-wrap" id="updateFilters">
+                        @foreach($updateFilters as $key => $label)
+                            <button type="button" class="btn btn-xs {{ $key === '' ? 'btn-dark' : 'btn-outline-secondary' }}" data-filter="{{ $key }}">{{ $label }}</button>
+                        @endforeach
+                    </div>
+                </div>
+                @forelse($days as $day => $entries)
+                    @php $date = \Carbon\Carbon::parse($day); @endphp
+                    <div class="update-day">
+                        <div class="update-day-label">{{ $date->isToday() ? 'Today' : ($date->isYesterday() ? 'Yesterday' : $date->format('l')) }} · {{ $date->format('d-m-Y') }}</div>
+                        @foreach($entries as $entry)
+                            @php $call = $entry->type === 'call' ? $callsById->get($entry->properties['call_log_id'] ?? 0) : null; @endphp
+                            <article class="update-box" data-type="{{ $entry->type }}">
+                                <span class="update-icon is-{{ $entry->type }}"><i class="bi {{ $updateIcons[$entry->type] ?? 'bi-dot' }}"></i></span>
+                                <div class="min-w-0 flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                        <span class="d-inline-flex align-items-center gap-2 flex-wrap">
+                                            <strong>{{ $entry->title }}</strong>
+                                            @if($call)
+                                                <span class="badge text-bg-{{ $call->statusBadge() }}">{{ ucfirst(str_replace(['-', '_'], ' ', $call->status)) }}</span>
+                                                @if($call->disposition)
+                                                    <span class="badge" style="background: {{ $call->disposition->color }}">{{ $call->disposition->name }}</span>
+                                                @endif
+                                                @if($call->provider === 'tata')
+                                                    <span class="badge bg-light text-muted border" title="Placed over Tata Smartflo">Tata</span>
+                                                @endif
+                                            @endif
+                                        </span>
+                                        <span class="text-muted small text-nowrap" title="{{ $entry->created_at->format('d-m-Y h:i A') }}">{{ $entry->created_at->format('h:i A') }}</span>
+                                    </div>
+                                    @if($call)
+                                        <div class="small text-muted mt-1">
+                                            <i class="bi bi-clock me-1"></i>{{ $call->talk_seconds ? gmdate('i:s', $call->talk_seconds) : 'No talk time' }}
+                                            @if($call->remark) · {{ $call->remark }} @endif
+                                        </div>
+                                        @if($call->hasRecording())
+                                            <audio controls preload="none" src="{{ $call->recordingUrl() }}" class="mt-2 d-block" style="height:30px;max-width:260px"></audio>
+                                        @endif
+                                    @elseif($entry->description)
+                                        <div class="small mt-1">{{ $entry->description }}</div>
+                                    @endif
+                                    <div class="text-body-tertiary small mt-1">
+                                        {{ $entry->user ? 'by ' . $entry->user->name : 'by system' }} · {{ $entry->created_at->diffForHumans() }}
+                                    </div>
+                                </div>
+                            </article>
+                        @endforeach
                     </div>
                 @empty
                     <p class="text-muted text-center py-4"><i class="bi bi-clock-history me-1"></i>Nothing recorded yet</p>
@@ -405,6 +400,31 @@
     {{-- Detail rail                                                    --}}
     {{-- ============================================================== --}}
     <aside class="profile-rail">
+        <div class="rail-actions">
+            @include('telephony._call_button', [
+                'number'       => $patient->mobile,
+                'leadId'       => $lead?->id,
+                'patientId'    => $patient->id,
+                'showWhatsApp' => true,
+            ])
+            @if(! empty($whatsappPanels) && auth()->user()->can('conversations.create'))
+                {{-- Opens the Messages tab and focuses the composer: the
+                     message is sent from this screen, not the inbox. --}}
+                <button type="button" class="btn btn-sm btn-outline-success" id="btnProfileWhatsApp" title="Send a WhatsApp message from here">
+                    <i class="bi bi-whatsapp me-1"></i>WhatsApp
+                </button>
+            @endif
+            @can('call_logs.view')
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnRecordings" data-url="{{ route('patients.recordings', $patient) }}">
+                    <i class="bi bi-record-circle me-1"></i>Recordings
+                </button>
+            @endcan
+            @can('followups.create')
+                <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#addFollowUpModal">
+                    <i class="bi bi-plus-lg me-1"></i>Add New
+                </button>
+            @endcan
+        </div>
         @include('partials.profile._rail', [
             'patient'   => $patient,
             'lead'      => $lead,
@@ -510,6 +530,22 @@
 
 @push('scripts')
 <script>
+// Updates filter ------------------------------------------------------------
+
+$('#updateFilters').on('click', 'button', function () {
+    const type = $(this).data('filter');
+    $('#updateFilters button').removeClass('btn-dark').addClass('btn-outline-secondary');
+    $(this).removeClass('btn-outline-secondary').addClass('btn-dark');
+
+    $('.update-box').each(function () {
+        $(this).toggleClass('d-none', !!type && $(this).data('type') !== type);
+    });
+    // A day with nothing left to show would be an orphan heading.
+    $('.update-day').each(function () {
+        $(this).toggleClass('d-none', $(this).find('.update-box:not(.d-none)').length === 0);
+    });
+});
+
 // Follow-up board ---------------------------------------------------------
 
 function filterTasks() {

@@ -40,6 +40,11 @@
 </div>
 
 <div class="rail-row">
+    <span class="rail-label"><i class="bi bi-hash"></i>Patient ID</span>
+    <span class="rail-value">{{ $patient->patient_code }}</span>
+</div>
+
+<div class="rail-row">
     <span class="rail-label"><i class="bi bi-building"></i>Centre</span>
     <span class="rail-value d-inline-flex align-items-center justify-content-end gap-2">
         @if($centre)

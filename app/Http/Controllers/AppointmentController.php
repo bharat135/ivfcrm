@@ -54,6 +54,8 @@ class AppointmentController extends Controller
 
         $appointment = Appointment::create($data);
 
+        $this->logToLead($appointment, 'Appointment booked');
+
         if (!empty($data['lead_id'])) {
             $stage = \App\Models\PipelineStage::where('slug', 'consultation-booked')->first();
             if ($stage) {
@@ -105,7 +107,42 @@ class AppointmentController extends Controller
 
         $appointment->update($data);
 
+        if ($status && $appointment->wasChanged('status')) {
+            $this->logToLead($appointment, 'Appointment ' . str_replace('_', '-', $status),
+                $status === 'cancelled' ? ($data['cancel_reason'] ?? null) : null);
+        }
+
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Appointments show in the lead's updates alongside calls and dispositions.
+     */
+    private function logToLead(Appointment $appointment, string $title, ?string $extra = null): void
+    {
+        $leadId = $appointment->lead_id ?: $appointment->patient?->lead_id;
+
+        if (! $leadId) {
+            return;
+        }
+
+        $appointment->loadMissing('doctor:id,name', 'patient:id,lead_id');
+
+        $description = implode(' · ', array_filter([
+            ucfirst(str_replace('_', ' ', $appointment->type ?: 'consultation')),
+            $appointment->doctor ? 'Dr. ' . $appointment->doctor->name : null,
+            $appointment->scheduled_at?->format('d-m-Y, h:i A'),
+            $extra ? 'Reason: ' . $extra : null,
+        ]));
+
+        \App\Models\LeadActivity::create([
+            'lead_id'     => $leadId,
+            'user_id'     => Auth::id(),
+            'type'        => 'appointment',
+            'title'       => $title,
+            'description' => $description,
+            'properties'  => ['appointment_id' => $appointment->id, 'status' => $appointment->status],
+        ]);
     }
 
     public function calendar(Request $request)
