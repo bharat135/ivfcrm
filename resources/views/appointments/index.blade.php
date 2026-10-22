@@ -9,9 +9,11 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="fw-bold mb-0">Appointment Management</h5>
+    @can('appointments.create')
     <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#bookModal">
         <i class="bi bi-plus-lg me-1"></i>Book Appointment
     </button>
+    @endcan
 </div>
 
 <div class="card border-0 shadow-sm">
@@ -23,11 +25,32 @@
                         {{-- Secondary columns are hidden on phones so the table fits the screen. --}}
                         <th>Patient</th><th class="d-none d-md-table-cell">Mobile</th><th>Doctor</th>
                         <th>Date</th><th class="d-none d-md-table-cell">Slot</th><th class="d-none d-lg-table-cell">Type</th>
-                        <th>Status</th><th class="d-none d-lg-table-cell">Center</th><th width="80">Actions</th>
+                        <th>Status</th><th class="d-none d-lg-table-cell">Center</th><th width="120">Actions</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Cancel Modal -->
+<div class="modal fade" id="cancelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">Cancel Appointment</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label small fw-semibold" for="cancelReason">Reason <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="cancelReason" rows="3" maxlength="1000" placeholder="Why is this appointment being cancelled?"></textarea>
+                <div class="invalid-feedback">Give a reason (at least 3 characters).</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Keep</button>
+                <button type="button" class="btn btn-danger btn-sm" id="confirmCancel">Cancel Appointment</button>
+            </div>
         </div>
     </div>
 </div>
@@ -148,11 +171,33 @@ const table = $('#appointmentTable').DataTable({
             return `<span class="badge bg-${c[d]||'secondary'}">${d}</span>`;
         }},
         { data: 'center.code', defaultContent: '—', className: 'd-none d-lg-table-cell' },
-        { data: null, orderable: false, render: (d, t, row) =>
-            `<a href="#" class="btn btn-xs btn-outline-primary"><i class="bi bi-eye"></i></a>` }
+        { data: 'action', orderable: false, searchable: false }
     ],
     buttons: [{ extend: 'csv', className: 'btn btn-sm btn-outline-secondary' }],
     language: { emptyTable: FUI.emptyState('bi-calendar-check', 'No appointments', 'Book one from a lead or patient record.') }
+});
+
+function setStatus(url, data) {
+    return $.ajax({ url, method: 'PUT', data })
+        .done(() => { toastr.success('Appointment updated.'); table.ajax.reload(null, false); })
+        .fail(x => toastr.error(x.responseJSON?.errors?.cancel_reason?.[0] || x.responseJSON?.message || 'Could not update the appointment.'));
+}
+
+$(document).on('click', '.js-appt-done', function () {
+    if (confirm('Mark this appointment as done (patient visited)?')) setStatus($(this).data('url'), { status: 'visited' });
+});
+
+let cancelUrl = null;
+$(document).on('click', '.js-appt-cancel', function () {
+    cancelUrl = $(this).data('url');
+    $('#cancelReason').val('').removeClass('is-invalid');
+    bootstrap.Modal.getOrCreateInstance($('#cancelModal')[0]).show();
+});
+$('#confirmCancel').on('click', function () {
+    const reason = $('#cancelReason').val().trim();
+    if (reason.length < 3) { $('#cancelReason').addClass('is-invalid'); return; }
+    setStatus(cancelUrl, { status: 'cancelled', cancel_reason: reason })
+        .done(() => bootstrap.Modal.getInstance($('#cancelModal')[0]).hide());
 });
 
 $('#saveAppointment').on('click', function() {

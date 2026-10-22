@@ -256,6 +256,12 @@ class LeadController extends Controller
             ->with('success', 'Lead created successfully.');
     }
 
+    /** Telecallers and quality analysts keep a lead's owner unless granted reassign_leads. */
+    private function canReassign(User $user): bool
+    {
+        return $user->can('reassign_leads') || ! $user->hasRole(['Telecaller', 'Call Quality Analyst']);
+    }
+
     private function isFrontLine(User $user): bool
     {
         return $user->hasRole(['Telecaller', 'Counsellor', 'Receptionist', 'Call Quality Analyst']);
@@ -370,7 +376,9 @@ class LeadController extends Controller
         $centers  = Center::active()->get();
         $telecallers = User::active()->whereHas('roles', fn($q) => $q->whereIn('name', ['Telecaller', 'Counsellor', 'Call Quality Analyst']))->get();
 
-        return view('leads.edit', compact('lead', 'sources', 'centers', 'telecallers'));
+        $canReassign = $this->canReassign(auth()->user());
+
+        return view('leads.edit', compact('lead', 'sources', 'centers', 'telecallers', 'canReassign'));
     }
 
     public function update(StoreLeadRequest $request, Lead $lead)
@@ -382,6 +390,11 @@ class LeadController extends Controller
         // Telecallers only ever see a masked number, so they cannot change it.
         if (! \App\Support\PhoneNumber::canView()) {
             unset($data['mobile'], $data['alt_mobile']);
+        }
+
+        // Nor do they hand a lead to someone else from the edit form.
+        if (! $this->canReassign($request->user())) {
+            unset($data['assigned_to']);
         }
 
         $before = $lead->replicate();

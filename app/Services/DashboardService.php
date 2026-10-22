@@ -42,9 +42,7 @@ class DashboardService
             $todayFollows = (clone $followQuery)->whereDate('scheduled_at', today())->count();
             $overdueFollows = (clone $followQuery)->where('status', 'pending')->where('scheduled_at', '<', now())->count();
 
-            $todayAppointments = Appointment::whereDate('scheduled_at', today())
-                ->when(!$isAdmin && $centerId, fn($q) => $q->where('center_id', $centerId))
-                ->count();
+            $todayAppointments = Appointment::query()->when(!$isAdmin, fn($q) => $q->visibleTo($user))->whereDate('scheduled_at', today())->count();
 
             $monthlyConversions = (clone $leadQuery)
                 ->whereMonth('created_at', now()->month)

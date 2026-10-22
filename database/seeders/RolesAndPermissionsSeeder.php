@@ -40,6 +40,11 @@ class RolesAndPermissionsSeeder extends Seeder
             Permission::firstOrCreate(['name' => $perm]);
         }
 
+        // Appointment scope (all / own centre / booked by me) and closing an appointment.
+        foreach (['view_all', 'view_center', 'view_own', 'complete', 'cancel'] as $action) {
+            Permission::firstOrCreate(['name' => "appointments.{$action}"]);
+        }
+
         $roleDefinitions = [
             'Super Admin' => ['*'], // assigned programmatically
             'Admin' => [
@@ -82,7 +87,10 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
             'Center Manager' => [
                 'leaves.*', 'view_mobile_numbers',
-                'leads.*', 'patients.*', 'appointments.*', 'followups.*', 'call_logs.*',
+                'leads.*', 'patients.*', 'followups.*', 'call_logs.*',
+                'appointments.view', 'appointments.create', 'appointments.edit', 'appointments.delete',
+                'appointments.export', 'appointments.approve',
+                'appointments.view_center', 'appointments.complete', 'appointments.cancel',
                 'doctors.view', 'reports.view', 'reports.export', 'counselling.*',
                 'conversations.*', 'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
                 'broadcasts.view', 'broadcasts.create', 'telephony.view', 'telephony.edit',
@@ -91,6 +99,7 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
             'Doctor' => [
                 'patients.view', 'patients.edit', 'appointments.view', 'appointments.edit',
+                'appointments.view_center', 'appointments.complete', 'appointments.cancel',
                 'treatments.*', 'counselling.view',
             ],
             'IVF Coordinator' => [
@@ -100,14 +109,16 @@ class RolesAndPermissionsSeeder extends Seeder
             'Counsellor' => [
                 'leaves.view', 'view_mobile_numbers',
                 'leads.view', 'leads.create', 'leads.edit', 'patients.view', 'patients.edit',
-                'appointments.*', 'counselling.*', 'followups.*',
+                'appointments.view', 'appointments.create', 'appointments.edit', 'appointments.delete',
+                'appointments.export', 'appointments.approve', 'appointments.view_center',
+                'counselling.*', 'followups.*',
                 'conversations.view', 'conversations.create', 'conversations.edit',
                 'whatsapp_templates.view',
             ],
             'Telecaller' => [
                 'leaves.view', // no view_mobile_numbers: numbers are masked for telecallers
                 'leads.view', 'leads.create', 'leads.edit', 'patients.view', 'patients.edit', 'followups.*', 'call_logs.*',
-                'appointments.view', 'appointments.create',
+                'appointments.view', 'appointments.create', 'appointments.view_own',
                 'conversations.view', 'conversations.create', 'conversations.edit',
                 'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
                 'view_own_leads',
@@ -116,7 +127,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'Call Quality Analyst' => [
                 'leaves.view',
                 'leads.view', 'leads.create', 'leads.edit', 'patients.view', 'patients.edit', 'followups.*', 'call_logs.*',
-                'appointments.view', 'appointments.create',
+                'appointments.view', 'appointments.create', 'appointments.view_own',
                 'conversations.view', 'conversations.create', 'conversations.edit',
                 'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
                 'view_own_leads',
@@ -124,7 +135,9 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
             'Receptionist' => [
                 'leaves.view', 'view_mobile_numbers',
-                'appointments.*', 'patients.view', 'patients.create',
+                'appointments.view', 'appointments.create', 'appointments.export',
+                'appointments.view_center', 'appointments.cancel',
+                'patients.view', 'patients.create',
                 'leads.view', 'leads.create',
                 'conversations.view', 'conversations.create',
             ],
@@ -132,7 +145,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'reports.*', 'patients.view', 'treatments.view',
             ],
             'Patient Support' => [
-                'patients.view', 'patients.edit', 'followups.*', 'appointments.view',
+                'patients.view', 'patients.edit', 'followups.*', 'appointments.view', 'appointments.view_center',
                 'conversations.view', 'conversations.create', 'conversations.edit',
                 'whatsapp_templates.view',
             ],

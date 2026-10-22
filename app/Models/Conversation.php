@@ -202,9 +202,14 @@ class Conversation extends Model
             return '#';
         }
 
-        $parts = preg_split('/\s+/', $name);
+        // First letter of the first two words that have one. Byte-wise substr
+        // split names like "🪷🌸Sanjay Mohan" mid-emoji and broke the inbox JSON.
+        preg_match_all('/\p{L}[\p{L}\p{M}]*/u', $name, $words);
 
-        return strtoupper(substr($parts[0], 0, 1) . (isset($parts[1]) ? substr($parts[1], 0, 1) : ''));
+        return mb_strtoupper(implode('', array_map(
+            fn ($word) => mb_substr($word, 0, 1),
+            array_slice($words[0], 0, 2)
+        )));
     }
 
     // -----------------------------------------------------------------

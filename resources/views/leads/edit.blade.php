@@ -98,6 +98,7 @@
                         @endforeach
                     </select>
                 </div>
+                @if($canReassign)
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold">Assign To</label>
                     <select name="assigned_to" class="form-select">
@@ -107,6 +108,7 @@
                         @endforeach
                     </select>
                 </div>
+                @endif
 
                 <div class="col-12">
                     <label class="form-label small fw-semibold">Remark</label>

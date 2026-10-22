@@ -14,14 +14,13 @@ class AppointmentController extends Controller
 {
     public function index(Request $request)
     {
+        abort_unless(Auth::user()->can('appointments.view'), 403);
+
         if ($request->ajax() || $request->wantsJson()) {
-            $query = Appointment::with(['patient:id,wife_name,mobile', 'doctor:id,name', 'center:id,name,code'])
-                ->when(Auth::user()->hasRole('Doctor'),
-                    fn($q) => $q->where('doctor_id', Auth::user()->doctor?->id)
-                )
-                ->when(Auth::user()->hasRole('Center Manager'),
-                    fn($q) => $q->where('center_id', Auth::user()->center_id)
-                );
+            // Everyone, their centre's, or only the ones they booked: see Appointment::scopeVisibleTo
+            $query = Appointment::with(['patient:id,wife_name,mobile', 'doctor:id,name', 'center:id,name,code', 'canceller:id,name'])
+                ->select('appointments.*')
+                ->visibleTo(Auth::user());
 
             return DataTables::of($query)
                 ->addColumn('action', fn($a) => view('appointments._actions', ['appointment' => $a])->render())
@@ -37,6 +36,8 @@ class AppointmentController extends Controller
 
     public function store(Request $request)
     {
+        abort_unless(Auth::user()->can('appointments.create'), 403);
+
         $data = $request->validate([
             'patient_id'   => ['nullable', 'exists:patients,id'],
             'lead_id'      => ['nullable', 'exists:leads,id'],
@@ -63,14 +64,44 @@ class AppointmentController extends Controller
         return response()->json(['success' => true, 'id' => $appointment->id]);
     }
 
+    /**
+     * Marking visited / no-show needs appointments.complete, cancelling needs
+     * appointments.cancel and a reason, anything else (reschedule, confirm,
+     * notes) needs appointments.edit, and only on an appointment the user sees.
+     */
     public function update(Request $request, Appointment $appointment)
     {
+        $user = Auth::user();
+        abort_unless($appointment->isVisibleTo($user), 403);
+
         $data = $request->validate([
             'scheduled_at'     => ['sometimes', 'date'],
             'duration_minutes' => ['sometimes', 'integer'],
             'status'           => ['sometimes', 'in:booked,confirmed,visited,no_show,cancelled,rescheduled'],
             'notes'            => ['nullable', 'string'],
+            'cancel_reason'    => ['required_if:status,cancelled', 'nullable', 'string', 'min:3', 'max:1000'],
+        ], [
+            'cancel_reason.required_if' => 'Give a reason for cancelling the appointment.',
         ]);
+
+        $status = $data['status'] ?? null;
+        $other  = array_diff(array_keys($data), ['status', 'cancel_reason']);
+
+        $allowed = match (true) {
+            in_array($status, ['visited', 'no_show'], true) => $user->can('appointments.complete'),
+            $status === 'cancelled'                         => $user->can('appointments.cancel'),
+            $status !== null                                => $user->can('appointments.edit'),
+            default                                         => true,
+        };
+        abort_unless($allowed && ($other === [] || $user->can('appointments.edit')), 403,
+            'You are not allowed to make this change to the appointment.');
+
+        if ($status === 'cancelled') {
+            $data['cancelled_by'] = $user->id;
+            $data['cancelled_at'] = now();
+        } else {
+            unset($data['cancel_reason']);
+        }
 
         $appointment->update($data);
 
@@ -83,7 +114,10 @@ class AppointmentController extends Controller
         $centerId = $request->get('center_id', Auth::user()->center_id);
         $date     = $request->get('date', today()->toDateString());
 
+        abort_unless(Auth::user()->can('appointments.view'), 403);
+
         $appointments = Appointment::with(['patient:id,wife_name,mobile', 'doctor:id,name'])
+            ->visibleTo(Auth::user())
             ->whereDate('scheduled_at', $date)
             ->when($doctorId, fn($q) => $q->where('doctor_id', $doctorId))
             ->when($centerId, fn($q) => $q->where('center_id', $centerId))

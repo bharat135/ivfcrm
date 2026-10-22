@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,6 +24,9 @@ class Appointment extends Model
         'status',
         'rescheduled_from_id',
         'notes',
+        'cancel_reason',
+        'cancelled_by',
+        'cancelled_at',
         'reminder_sent',
     ];
 
@@ -32,7 +36,44 @@ class Appointment extends Model
             'scheduled_at' => 'datetime',
             'duration_minutes' => 'integer',
             'reminder_sent' => 'boolean',
+            'cancelled_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The appointments a user may see: every one (appointments.view_all), their
+     * centre's (appointments.view_center) or only the ones they booked
+     * (appointments.view_own, and the fallback). A doctor always sees their own.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->can('appointments.view_all')) {
+            return $query;
+        }
+
+        $doctorId = $user->doctor?->id;
+
+        return $query->where(function (Builder $q) use ($user, $doctorId) {
+            if ($user->can('appointments.view_center') && $user->center_id) {
+                $q->where('center_id', $user->center_id);
+            } else {
+                $q->where('created_by', $user->id);
+            }
+
+            if ($doctorId) {
+                $q->orWhere('doctor_id', $doctorId);
+            }
+        });
+    }
+
+    public function isVisibleTo(User $user): bool
+    {
+        return static::query()->visibleTo($user)->whereKey($this->getKey())->exists();
+    }
+
+    public function canceller(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 
     public function doctor(): BelongsTo
