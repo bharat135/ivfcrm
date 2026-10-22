@@ -118,8 +118,8 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                     <h6 class="mb-0 fw-semibold">Updates <span class="fw-normal small text-muted">— calls, dispositions, appointments, owner changes and edits, newest first</span></h6>
                     <div class="d-flex gap-1 flex-wrap" id="updateFilters">
-                        @foreach($updateFilters as $key => $label)
-                            <button type="button" class="btn btn-xs {{ $key === 'status' ? 'btn-dark' : 'btn-outline-secondary' }}" data-filter="{{ $key }}">{{ $label }}</button>
+                        @foreach($updateFilters as $key => $filterLabel)
+                            <button type="button" class="btn btn-xs {{ $key === 'status' ? 'btn-dark' : 'btn-outline-secondary' }}" data-filter="{{ $key }}">{{ $filterLabel }}</button>
                         @endforeach
                     </div>
                 </div>
@@ -403,26 +403,22 @@
     <aside class="profile-rail">
         <div class="rail-actions">
             @include('telephony._call_button', [
-                'number'       => $patient->mobile,
-                'leadId'       => $lead?->id,
-                'patientId'    => $patient->id,
-                'showWhatsApp' => true,
+                'number'    => $patient->mobile,
+                'leadId'    => $lead?->id,
+                'patientId' => $patient->id,
+                'label'     => '',
+                'iconOnly'  => true,
             ])
             @if(! empty($whatsappPanels) && auth()->user()->can('conversations.create'))
                 {{-- Opens the Messages tab and focuses the composer: the
                      message is sent from this screen, not the inbox. --}}
-                <button type="button" class="btn btn-sm btn-outline-success" id="btnProfileWhatsApp" title="Send a WhatsApp message from here">
-                    <i class="bi bi-whatsapp me-1"></i>WhatsApp
+                <button type="button" class="btn btn-sm btn-outline-success btn-icon-round" id="btnProfileWhatsApp" title="Send a WhatsApp message from here" aria-label="WhatsApp">
+                    <i class="bi bi-whatsapp"></i>
                 </button>
             @endif
             @can('call_logs.view')
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnRecordings" data-url="{{ route('patients.recordings', $patient) }}">
-                    <i class="bi bi-record-circle me-1"></i>Recordings
-                </button>
-            @endcan
-            @can('followups.create')
-                <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#addFollowUpModal">
-                    <i class="bi bi-plus-lg me-1"></i>Add New
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnRecordings" data-url="{{ route('patients.recordings', $patient) }}" title="Call recordings">
+                    <i class="bi bi-record-circle me-1"></i>Rec
                 </button>
             @endcan
         </div>

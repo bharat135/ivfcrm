@@ -12,6 +12,8 @@
     $size           = $size ?? 'sm';
     $label          = $label ?? 'Call';
     $showWhatsApp   = $showWhatsApp ?? false;
+    // Round, icon-only buttons (the profile's record card).
+    $iconOnly       = $iconOnly ?? false;
 @endphp
 
 @php
@@ -23,29 +25,24 @@
 @endphp
 @can('call_logs.create')
     @if($number)
-        <div class="btn-group btn-group-{{ $size }}">
-            <button type="button" class="btn btn-success js-click-to-call"
+        <div class="{{ $iconOnly ? 'd-inline-flex gap-2' : 'btn-group btn-group-' . $size }}">
+            <button type="button" class="btn btn-success js-click-to-call {{ $iconOnly ? 'btn-icon-round' : '' }}"
                     data-number="{{ $dialNumber }}"
                     @if($leadId) data-lead="{{ $leadId }}" @endif
                     @if($patientId) data-patient="{{ $patientId }}" @endif
-                    title="Call {{ $shownNumber }} from your softphone">
-                <i class="bi bi-telephone-outbound me-1"></i>{{ $label }}
+                    title="Call {{ $shownNumber }} from your softphone" aria-label="Call">
+                <i class="bi bi-telephone-fill {{ $iconOnly ? '' : 'me-1' }}"></i>{{ $iconOnly ? '' : $label }}
             </button>
 
             {{-- Swapped in by the global dialer while a call to this contact
                  is live: ends the call from the profile itself. --}}
-            <button type="button" class="btn btn-danger js-hangup-call d-none"
+            <button type="button" class="btn btn-danger js-hangup-call d-none {{ $iconOnly ? 'btn-icon-round' : '' }}"
                     @if($leadId) data-lead="{{ $leadId }}" @endif
                     @if($patientId) data-patient="{{ $patientId }}" @endif
-                    title="End the current call">
-                <i class="bi bi-telephone-x me-1"></i>Disconnect
+                    title="End the current call" aria-label="Disconnect">
+                <i class="bi bi-telephone-x {{ $iconOnly ? '' : 'me-1' }}"></i>{{ $iconOnly ? '' : 'Disconnect' }}
             </button>
 
-            @if($canSeeNumber)
-            <a href="tel:{{ $number }}" class="btn btn-outline-secondary" title="Dial with the desktop softphone (MicroSIP)">
-                <i class="bi bi-pc-display me-1"></i>Desktop
-            </a>
-            @endif
         </div>
     @endif
 @endcan
