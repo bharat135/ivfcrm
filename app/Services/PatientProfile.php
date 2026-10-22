@@ -43,9 +43,10 @@ class PatientProfile
         $lead = $patient->lead;
 
         // Everything that happened to this person is logged against the enquiry
-        // facet, because that is the record a telecaller works against.
+        // facet, because that is the record a telecaller works against. Calls
+        // have their own tab, so the log keeps to dispositions and changes.
         $timeline = $lead
-            ? $lead->activities()->with('user:id,name')->limit(100)->get()
+            ? $lead->activities()->where('type', '!=', 'call')->with('user:id,name')->limit(100)->get()
             : collect();
 
         $calls = $lead

@@ -114,7 +114,9 @@ class LeaveAndPrivacyTest extends TestCase
         $this->assertSame($this->admin->id, $entry->user_id);
 
         $this->actingAs($this->admin)->get(route('leads.show', $lead))
-            ->assertOk()->assertSee('every call, owner change, edit and follow-up')->assertSee('Owner changed to ' . $this->colleague->name);
+            ->assertOk()->assertSee('every disposition, owner change, edit and follow-up')->assertSee('Owner changed to ' . $this->colleague->name)
+            // Calls are recorded in the log table but shown under the Calls tab, not in the Log.
+            ->assertDontSee('Outbound call');
     }
 
     // =================================================================

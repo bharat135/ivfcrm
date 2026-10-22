@@ -110,7 +110,13 @@ class LeadService
             // Keep the patient facet on the same rung of the funnel.
             $this->patients->syncStageFromLead($lead);
 
-            $this->logActivity($lead, 'status', 'Disposition Updated', $disposition->name . ': ' . $remark);
+            $subName = $subDispositionId ? \App\Models\Disposition::whereKey($subDispositionId)->value('name') : null;
+            $followUpNote = $nextFollowUpAt
+                ? ' · Next follow-up ' . \Carbon\Carbon::parse($nextFollowUpAt)->format('d-m-Y h:i A')
+                : '';
+
+            $this->logActivity($lead, 'status', 'Disposition added',
+                $disposition->name . ($subName ? ' › ' . $subName : '') . ': ' . $remark . $followUpNote);
 
             return $lead;
         });

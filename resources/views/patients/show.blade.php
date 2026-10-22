@@ -150,7 +150,7 @@
                     </div>
                 @endif
 
-                <h6 class="fw-semibold small text-muted mb-3">Log <span class="fw-normal">— every call, owner change, edit and follow-up, with who and when</span></h6>
+                <h6 class="fw-semibold small text-muted mb-3">Log <span class="fw-normal">— every disposition, owner change, edit and follow-up, with who and when. Calls are under the Calls tab.</span></h6>
                 @php
                     $logIcons = ['call' => 'bi-telephone', 'assignment' => 'bi-person-check', 'status' => 'bi-flag', 'followup' => 'bi-calendar-check', 'whatsapp' => 'bi-whatsapp', 'system' => 'bi-gear'];
                 @endphp
