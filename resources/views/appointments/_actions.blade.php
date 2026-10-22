@@ -2,8 +2,13 @@
 <div class="d-flex gap-1">
     @if($open)
         @can('appointments.complete')
-            <button type="button" class="btn btn-xs btn-outline-success js-appt-done" data-url="{{ route('appointments.update', $appointment) }}" title="Mark done">
+            <button type="button" class="btn btn-xs btn-outline-success js-appt-done" data-url="{{ route('appointments.update', $appointment) }}" title="Mark done (patient visited)">
                 <i class="bi bi-check2-circle"></i>
+            </button>
+        @endcan
+        @can('appointments.edit')
+            <button type="button" class="btn btn-xs btn-outline-primary js-appt-reschedule" data-url="{{ route('appointments.update', $appointment) }}" data-when="{{ $appointment->scheduled_at?->format('Y-m-d H:i') }}" title="Reschedule">
+                <i class="bi bi-calendar-event"></i>
             </button>
         @endcan
         @can('appointments.cancel')

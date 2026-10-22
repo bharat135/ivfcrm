@@ -119,17 +119,17 @@
                     <h6 class="mb-0 fw-semibold">Updates <span class="fw-normal small text-muted">— calls, dispositions, appointments, owner changes and edits, newest first</span></h6>
                     <div class="d-flex gap-1 flex-wrap" id="updateFilters">
                         @foreach($updateFilters as $key => $label)
-                            <button type="button" class="btn btn-xs {{ $key === '' ? 'btn-dark' : 'btn-outline-secondary' }}" data-filter="{{ $key }}">{{ $label }}</button>
+                            <button type="button" class="btn btn-xs {{ $key === 'status' ? 'btn-dark' : 'btn-outline-secondary' }}" data-filter="{{ $key }}">{{ $label }}</button>
                         @endforeach
                     </div>
                 </div>
                 @forelse($days as $day => $entries)
                     @php $date = \Carbon\Carbon::parse($day); @endphp
-                    <div class="update-day">
+                    <div class="update-day {{ $entries->where('type', 'status')->isEmpty() ? 'd-none' : '' }}">
                         <div class="update-day-label">{{ $date->isToday() ? 'Today' : ($date->isYesterday() ? 'Yesterday' : $date->format('l')) }} · {{ $date->format('d-m-Y') }}</div>
                         @foreach($entries as $entry)
                             @php $call = $entry->type === 'call' ? $callsById->get($entry->properties['call_log_id'] ?? 0) : null; @endphp
-                            <article class="update-box" data-type="{{ $entry->type }}">
+                            <article class="update-box {{ $entry->type === 'status' ? '' : 'd-none' }}" data-type="{{ $entry->type }}">
                                 <span class="update-icon is-{{ $entry->type }}"><i class="bi {{ $updateIcons[$entry->type] ?? 'bi-dot' }}"></i></span>
                                 <div class="min-w-0 flex-grow-1">
                                     <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
@@ -191,6 +191,7 @@
                         <span class="badge text-bg-{{ $appointment->status === 'visited' ? 'success' : ($appointment->status === 'cancelled' ? 'danger' : 'primary') }}">
                             {{ ucfirst($appointment->status) }}
                         </span>
+                        @include('appointments._actions', ['appointment' => $appointment])
                     </div>
                 @empty
                     <p class="text-muted text-center py-4"><i class="bi bi-calendar-x me-1"></i>No appointments booked</p>
@@ -433,6 +434,10 @@
         ])
     </aside>
 </div>
+
+@canany(['appointments.complete', 'appointments.edit', 'appointments.cancel'])
+    @include('appointments._support')
+@endcanany
 
 {{-- Book a consultation — created inline, no page change. --}}
 @can('appointments.create')

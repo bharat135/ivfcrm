@@ -40,6 +40,20 @@
 </div>
 
 <div class="rail-row">
+    <span class="rail-label"><i class="bi bi-person-vcard"></i>Name</span>
+    @if($lead && auth()->user()->can('update', $lead))
+        <span class="rail-value d-inline-flex align-items-center justify-content-end gap-1 js-name-wrap">
+            <span class="js-name-text text-truncate" title="{{ $lead->name }}">{{ $lead->name ?: '—' }}</span>
+            <button type="button" class="btn btn-xs btn-light js-name-edit" title="Edit name" aria-label="Edit name"><i class="bi bi-pencil"></i></button>
+            <input type="text" class="form-control form-control-sm d-none js-name-input" value="{{ $lead->name }}" maxlength="191"
+                   data-url="{{ route('leads.details', $lead) }}" aria-label="Patient name" style="max-width: 170px">
+        </span>
+    @else
+        <span class="rail-value">{{ $patient->coupleName() }}</span>
+    @endif
+</div>
+
+<div class="rail-row">
     <span class="rail-label"><i class="bi bi-hash"></i>Patient ID</span>
     <span class="rail-value">{{ $patient->patient_code }}</span>
 </div>
@@ -47,7 +61,16 @@
 <div class="rail-row">
     <span class="rail-label"><i class="bi bi-building"></i>Centre</span>
     <span class="rail-value d-inline-flex align-items-center justify-content-end gap-2">
-        @if($centre)
+        @if($lead && auth()->user()->can('update', $lead))
+            {{-- The assigned centre, shown selected for everyone who opens the
+                 record; change it here and the patient file follows. --}}
+            <select class="form-select form-select-sm js-lead-center" data-url="{{ route('leads.center', $lead) }}" aria-label="Centre" style="max-width: 170px; display: inline-block">
+                <option value="" disabled @selected(! $lead->center_id)>Not assigned</option>
+                @foreach(\App\Models\Center::where('is_active', true)->orderBy('name')->get(['id', 'name']) as $c)
+                    <option value="{{ $c->id }}" @selected($lead->center_id == $c->id)>{{ $c->name }}</option>
+                @endforeach
+            </select>
+        @elseif($centre)
             <span class="rail-mark" style="background: {{ $mark }}">{{ strtoupper(substr($centre->name, 0, 1)) }}</span>
             <span class="text-truncate">{{ $centre->name }}</span>
         @else
@@ -59,17 +82,6 @@
 <div class="rail-row">
     <span class="rail-label"><i class="bi bi-clipboard-pulse"></i>Diagnosis</span>
     <span class="rail-value">{{ $patient->diagnosis ?: '—' }}</span>
-</div>
-
-<div class="rail-row">
-    <span class="rail-label"><i class="bi bi-hourglass-split"></i>Trying since</span>
-    <span class="rail-value">
-        @if($patient->infertility_duration_months)
-            <span class="badge bg-success-subtle text-success">{{ $patient->infertility_duration_months }} months</span>
-        @else
-            —
-        @endif
-    </span>
 </div>
 
 <div class="rail-divider"></div>
@@ -124,17 +136,6 @@
 </div>
 
 @if($lead && auth()->user()->can('update', $lead))
-    {{-- Change the centre right here; the patient file follows and the log records who did it. --}}
-    <div class="rail-row">
-        <span class="rail-label"><i class="bi bi-arrow-left-right"></i>Move to</span>
-        <span class="rail-value">
-            <select class="form-select form-select-sm js-lead-center" data-url="{{ route('leads.center', $lead) }}" style="max-width: 170px; display: inline-block">
-                @foreach(\App\Models\Center::where('is_active', true)->orderBy('name')->get(['id', 'name']) as $c)
-                    <option value="{{ $c->id }}" @selected($lead->center_id == $c->id)>{{ $c->name }}</option>
-                @endforeach
-            </select>
-        </span>
-    </div>
     @push('scripts')
     <script>
     $(document).on('change', '.js-lead-center', function () {
@@ -142,6 +143,31 @@
         $.ajax({ url: $s.data('url'), method: 'PATCH', data: { _token: '{{ csrf_token() }}', center_id: $s.val() } })
             .done(res => { toastr.success(res.message); setTimeout(() => window.location.reload(), 600); })
             .fail(xhr => { toastr.error(xhr.responseJSON?.message || 'Could not change the centre.'); $s.prop('disabled', false); });
+    });
+
+    // Name, edited in place: pencil opens the box, Enter or leaving it saves, Escape cancels.
+    function closeNameEdit($input) {
+        const $w = $input.closest('.js-name-wrap');
+        $input.addClass('d-none');
+        $w.find('.js-name-text, .js-name-edit').removeClass('d-none');
+    }
+    $(document).on('click', '.js-name-edit', function () {
+        const $w = $(this).closest('.js-name-wrap');
+        $w.find('.js-name-text, .js-name-edit').addClass('d-none');
+        $w.find('.js-name-input').removeClass('d-none').trigger('focus');
+    });
+    $(document).on('keydown', '.js-name-input', function (e) {
+        if (e.key === 'Escape') { $(this).val($(this).closest('.js-name-wrap').find('.js-name-text').text().trim()); closeNameEdit($(this)); }
+        if (e.key === 'Enter')  { e.preventDefault(); $(this).trigger('blur'); }
+    });
+    $(document).on('blur', '.js-name-input', function () {
+        const $i = $(this);
+        const name = $i.val().trim();
+        if (!name || name === $i.closest('.js-name-wrap').find('.js-name-text').text().trim()) { closeNameEdit($i); return; }
+        $i.prop('disabled', true);
+        $.ajax({ url: $i.data('url'), method: 'PATCH', data: { _token: '{{ csrf_token() }}', name } })
+            .done(res => { toastr.success(res.message); setTimeout(() => window.location.reload(), 500); })
+            .fail(xhr => { toastr.error(xhr.responseJSON?.message || 'Could not save the name.'); $i.prop('disabled', false); });
     });
     </script>
     @endpush

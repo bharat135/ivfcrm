@@ -56,6 +56,7 @@ Route::middleware(['auth', 'single.device'])->group(function () {
         Route::post('/{lead}/reassign', [LeadController::class, 'reassign'])->name('reassign');
         Route::post('/{lead}/stage', [LeadController::class, 'stageUpdate'])->name('stage');
         Route::patch('/{lead}/center', [LeadController::class, 'updateCenter'])->name('center');
+        Route::patch('/{lead}/details', [LeadController::class, 'updateDetails'])->name('details');
         Route::post('/bulk-assign', [LeadController::class, 'bulkAssign'])->name('bulk_assign');
 
         // Bulk calling: dial the selected leads one after another.

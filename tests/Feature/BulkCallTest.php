@@ -217,8 +217,10 @@ class BulkCallTest extends TestCase
 
         $this->actingAs($this->agent)
             ->postJson(route('leads.disposition', $first), [
-                'disposition_id' => Disposition::whereNull('parent_id')->first()->id,
-                'remark'         => 'Spoke, will visit',
+                'disposition_id'    => Disposition::whereNull('parent_id')->first()->id,
+                'remark'            => 'Spoke, will visit',
+                // Every disposition but the stop-calling ones needs a callback time.
+                'next_follow_up_at' => now()->addDay()->setTime(11, 0)->format('Y-m-d H:i'),
             ])
             ->assertOk()
             ->assertJsonPath('next_url', route('leads.show', ['lead' => $second->id, 'autodial' => 1]));

@@ -36,7 +36,7 @@ class PatientProfile
             'lead.campaign', 'lead.adset', 'lead.ad',
             'lead.sourceTouches.source', 'lead.sourceTouches.campaign',
             'documents.uploader',
-            'appointments' => fn ($q) => $q->with('doctor:id,name')->latest('scheduled_at')->limit(25),
+            'appointments' => fn ($q) => $q->with('doctor:id,name', 'canceller:id,name')->latest('scheduled_at')->limit(25),
             'treatmentCycles' => fn ($q) => $q->with('doctor:id,name')->latest()->limit(10),
         ]);
 

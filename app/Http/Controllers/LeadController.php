@@ -201,13 +201,14 @@ class LeadController extends Controller
      */
     public function next(Request $request, \App\Services\NextLeadFinder $finder)
     {
-        $next = $finder->for($request->user(), $request->integer('after') ?: null);
+        $next  = $finder->for($request->user(), $request->integer('after') ?: null);
+        $saved = $request->boolean('saved') ? 'Disposition saved. ' : '';
 
         if (! $next) {
-            return redirect()->route('leads.index')->with('success', 'Nothing waiting: no uncalled leads and no follow-ups due right now.');
+            return redirect()->route('leads.index')->with('success', $saved . 'Nothing waiting: no uncalled leads and no follow-ups due right now.');
         }
 
-        return redirect()->route('leads.show', $next['lead'])->with('success', 'Next: ' . $next['reason']);
+        return redirect()->route('leads.show', $next['lead'])->with('success', $saved . 'Next: ' . $next['reason']);
     }
 
     public function create()
@@ -412,6 +413,26 @@ class LeadController extends Controller
         return redirect()->route('leads.show', $lead)->with('success', 'Lead updated.');
     }
 
+    /**
+     * Inline edits from the record card (the name, for now): JSON, logged, and
+     * mirrored to the patient file like any other detail change.
+     */
+    public function updateDetails(Request $request, Lead $lead)
+    {
+        $this->authorize('update', $lead);
+
+        $data = $request->validate(['name' => ['required', 'string', 'max:191']]);
+
+        $before = $lead->replicate();
+        $lead->update($data);
+        $this->linker->syncContactFromLead($lead);
+
+        $this->service->logActivity($lead, 'system', 'Details updated',
+            $this->describeChanges($before, $lead) ?: 'No field values changed.');
+
+        return response()->json(['success' => true, 'message' => 'Name updated.']);
+    }
+
     public function destroy(Lead $lead)
     {
         $this->authorize('delete', $lead);
@@ -425,7 +446,13 @@ class LeadController extends Controller
             'disposition_id'     => ['required', 'exists:dispositions,id'],
             'sub_disposition_id' => ['nullable', 'exists:dispositions,id'],
             'remark'             => ['required', 'string', 'min:3'],
-            'next_follow_up_at'  => ['nullable', 'date', 'after:now', new \App\Rules\WithinCallHours()],
+            // Every outcome needs a callback time, except the ones that stop calling.
+            'next_follow_up_at'  => [
+                \Illuminate\Validation\Rule::requiredIf(fn () => ! Disposition::whereKey($request->disposition_id)->value('is_lost')),
+                'nullable', 'date', 'after:now', new \App\Rules\WithinCallHours(),
+            ],
+        ], [
+            'next_follow_up_at.required' => 'Pick when to call back: a follow-up time is needed for every disposition except the ones that stop calling.',
         ]);
 
         $this->service->updateDisposition(

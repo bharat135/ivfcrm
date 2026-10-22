@@ -56,6 +56,12 @@ class AppointmentController extends Controller
 
         $this->logToLead($appointment, 'Appointment booked');
 
+        // Booking a consultation is what puts an enquiry on the Patients list.
+        $appointment->loadMissing('lead', 'patient.lead');
+        if ($lead = $appointment->lead ?: $appointment->patient?->lead) {
+            app(\App\Services\PatientLinker::class)->advance($lead, \App\Support\PatientJourney::CONSULTATION, 'appointment booked');
+        }
+
         if (!empty($data['lead_id'])) {
             $stage = \App\Models\PipelineStage::where('slug', 'consultation-booked')->first();
             if ($stage) {
@@ -107,7 +113,9 @@ class AppointmentController extends Controller
 
         $appointment->update($data);
 
-        if ($status && $appointment->wasChanged('status')) {
+        if ($appointment->wasChanged('scheduled_at')) {
+            $this->logToLead($appointment, 'Appointment rescheduled');
+        } elseif ($status && $appointment->wasChanged('status')) {
             $this->logToLead($appointment, 'Appointment ' . str_replace('_', '-', $status),
                 $status === 'cancelled' ? ($data['cancel_reason'] ?? null) : null);
         }
@@ -120,13 +128,13 @@ class AppointmentController extends Controller
      */
     private function logToLead(Appointment $appointment, string $title, ?string $extra = null): void
     {
+        $appointment->loadMissing('doctor:id,name', 'patient:id,lead_id');
+
         $leadId = $appointment->lead_id ?: $appointment->patient?->lead_id;
 
         if (! $leadId) {
             return;
         }
-
-        $appointment->loadMissing('doctor:id,name', 'patient:id,lead_id');
 
         $description = implode(' · ', array_filter([
             ucfirst(str_replace('_', ' ', $appointment->type ?: 'consultation')),

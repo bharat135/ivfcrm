@@ -84,6 +84,7 @@ class PatientController extends Controller
             ]);
 
         $this->scopeVisibility($query);
+        $this->bookedOnly($query);
         $this->applyFilters($query, $request);
 
         return DataTables::of($query)
@@ -149,7 +150,9 @@ class PatientController extends Controller
             return;
         }
 
-        if ($user->hasRole('Center Manager')) {
+        // Centre staff (manager, reception, doctors, counsellors) see their own
+        // centre's people only.
+        if ($user->center_id && ! $user->hasRole(['Telecaller', 'Call Quality Analyst'])) {
             $query->where('patients.center_id', $user->center_id);
 
             return;
@@ -159,6 +162,20 @@ class PatientController extends Controller
         $query->where(function ($q) use ($user) {
             $q->where('leads.assigned_to', $user->id)
                 ->orWhereNull('leads.assigned_to');
+        });
+    }
+
+    /**
+     * The patient list is for people who have booked a consultation; every
+     * other enquiry stays on the enquiries screen.
+     */
+    private function bookedOnly($query): void
+    {
+        $query->where(function ($q) {
+            $q->whereIn('patients.journey_stage', [PatientJourney::CONSULTATION, PatientJourney::TREATMENT, PatientJourney::CLOSED])
+                ->orWhereExists(fn ($s) => $s->selectRaw('1')->from('appointments')
+                    ->whereNull('appointments.deleted_at')
+                    ->whereColumn('appointments.patient_id', 'patients.id'));
         });
     }
 
@@ -187,6 +204,7 @@ class PatientController extends Controller
             ->leftJoin('leads', 'leads.id', '=', 'patients.lead_id');
 
         $this->scopeVisibility($query);
+        $this->bookedOnly($query);
 
         $counts = $query
             ->select('patients.journey_stage', DB::raw('count(*) as total'))

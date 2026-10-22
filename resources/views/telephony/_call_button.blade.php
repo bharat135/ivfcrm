@@ -41,19 +41,9 @@
                 <i class="bi bi-telephone-x me-1"></i>Disconnect
             </button>
 
-            @if($showWhatsApp && config('telephony.whatsapp_calling.enabled'))
-                <button type="button" class="btn btn-outline-success js-whatsapp-call"
-                        data-number="{{ $dialNumber }}"
-                        @if($leadId) data-lead="{{ $leadId }}" @endif
-                        @if($conversationId) data-conversation="{{ $conversationId }}" @endif
-                        title="Call over WhatsApp">
-                    <i class="bi bi-whatsapp"></i>
-                </button>
-            @endif
-
             @if($canSeeNumber)
-            <a href="tel:{{ $number }}" class="btn btn-outline-secondary" title="Dial with your desktop softphone">
-                <i class="bi bi-box-arrow-up-right"></i>
+            <a href="tel:{{ $number }}" class="btn btn-outline-secondary" title="Dial with the desktop softphone (MicroSIP)">
+                <i class="bi bi-pc-display me-1"></i>Desktop
             </a>
             @endif
         </div>

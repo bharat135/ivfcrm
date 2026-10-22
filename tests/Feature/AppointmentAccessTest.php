@@ -71,7 +71,7 @@ class AppointmentAccessTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_reception_sees_its_centre_and_may_only_cancel_with_a_reason(): void
+    public function test_reception_sees_its_centre_and_closes_visits_with_a_reason_to_cancel(): void
     {
         $reception = $this->user('Receptionist', $this->mine);
         $booker    = $this->user('Telecaller');
@@ -83,8 +83,17 @@ class AppointmentAccessTest extends TestCase
         $this->assertContains($here->id, $ids);
         $this->assertNotContains($there->id, $ids);
 
-        $this->actingAs($reception)->putJson(route('appointments.update', $here), ['status' => 'visited'])
-            ->assertForbidden();
+        // Reception closes the loop too: visited, or a new time.
+        $visited = $this->appointment($this->mine, $booker);
+        $this->actingAs($reception)->putJson(route('appointments.update', $visited), ['status' => 'visited'])->assertOk();
+        $this->assertSame('visited', $visited->fresh()->status);
+
+        $moved   = $this->appointment($this->mine, $booker);
+        $newTime = now()->addDays(2)->setTime(10, 30);
+        $this->actingAs($reception)->putJson(route('appointments.update', $moved), [
+            'scheduled_at' => $newTime->format('Y-m-d H:i'), 'status' => 'rescheduled',
+        ])->assertOk();
+        $this->assertSame($newTime->format('Y-m-d H:i'), $moved->fresh()->scheduled_at->format('Y-m-d H:i'));
 
         $this->actingAs($reception)->putJson(route('appointments.update', $here), ['status' => 'cancelled'])
             ->assertUnprocessable()->assertJsonValidationErrors('cancel_reason');

@@ -135,8 +135,8 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
             'Receptionist' => [
                 'leaves.view', 'view_mobile_numbers',
-                'appointments.view', 'appointments.create', 'appointments.export',
-                'appointments.view_center', 'appointments.cancel',
+                'appointments.view', 'appointments.create', 'appointments.edit', 'appointments.export',
+                'appointments.view_center', 'appointments.complete', 'appointments.cancel',
                 'patients.view', 'patients.create',
                 'leads.view', 'leads.create',
                 'conversations.view', 'conversations.create',
