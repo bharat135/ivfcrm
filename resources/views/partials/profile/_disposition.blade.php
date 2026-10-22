@@ -25,16 +25,16 @@
                     </select>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold text-muted" for="subDisposition">Sub-disposition <span class="fw-normal">· when the disposition has one</span></label>
+                    <label class="form-label small fw-semibold text-muted" for="subDisposition" id="subDispositionLabel">Sub-disposition <span class="fw-normal">· when the disposition has one</span></label>
                     <select class="form-select form-select-sm" id="subDisposition" name="sub_disposition_id" disabled>
                         <option value="">Select</option>
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <label class="form-label small fw-semibold" for="nextFollowUp">Next follow-up <span class="fw-normal text-muted">date &amp; time</span> <span class="text-danger" id="followUpRequired">*</span></label>
                     <input type="text" name="next_follow_up_at" id="nextFollowUp" class="form-control form-control-sm" placeholder="Pick date and time">
                 </div>
-                <div class="col-md-8">
+                <div class="col-md-6">
                     <label class="form-label small fw-semibold d-flex justify-content-between align-items-center" for="remark">
                         <span>Remark <span class="text-danger">*</span></span>
                         <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill" id="remarkMic" title="Speak the remark (speech to text)">
@@ -83,10 +83,19 @@ function refreshDisposition() {
         .append(children.map(c => `<option value="${c.id}">${c.name}</option>`).join(''))
         .prop('disabled', children.length === 0);
 
-    // Every outcome needs a callback time, except the ones that stop calling.
+    // Every outcome needs a callback time, except the ones that stop calling;
+    // those take the reason instead.
     const stopsCalling = String(option.data('stop-call')) === '1';
     $('#followUpRequired').toggleClass('d-none', stopsCalling);
     $('#nextFollowUp').prop('required', !stopsCalling);
+
+    const needsReason = stopsCalling && children.length > 0;
+    $('#subDisposition').prop('required', needsReason);
+    $('#subDispositionLabel')
+        .toggleClass('text-muted', !needsReason)
+        .html(needsReason
+            ? 'Reason <span class="text-danger">*</span>'
+            : 'Sub-disposition <span class="fw-normal">· when the disposition has one</span>');
 }
 
 $('#disposition').on('change', refreshDisposition);

@@ -24,25 +24,23 @@ class DispositionSeeder extends Seeder
         return [
             ['name' => 'Visit done',                'color' => '#198754', 'stage_slug' => 'consultation-visited'],
             ['name' => 'Already Visit done',        'color' => '#198754', 'stage_slug' => 'consultation-visited'],
-            ['name' => 'Invalid Number',            'color' => '#dc3545', 'is_lost' => true],
-            ['name' => 'Do Not disturb',            'color' => '#dc3545', 'is_lost' => true],
-            ['name' => 'Fake Lead',                 'color' => '#dc3545', 'is_lost' => true],
-            ['name' => 'Not interested',            'color' => '#dc3545', 'is_lost' => true],
-            ['name' => 'Not Looking for Treatment', 'color' => '#dc3545', 'is_lost' => true],
-            ['name' => 'Not inquired',              'color' => '#dc3545', 'is_lost' => true],
             ['name' => 'Cold Lead',                 'color' => '#6c757d'],
-            ['name' => 'Location not preferred',    'color' => '#dc3545', 'is_lost' => true],
             ['name' => 'Warm Lead',                 'color' => '#ffc107', 'requires_followup' => true, 'stage_slug' => 'interested'],
             ['name' => 'Ringing',                   'color' => '#fd7e14', 'requires_followup' => true],
             ['name' => 'Interested to Visit',       'color' => '#0dcaf0', 'requires_followup' => true, 'stage_slug' => 'interested'],
             ['name' => 'Appointment Booked',        'color' => '#0d6efd', 'stage_slug' => 'consultation-booked'],
             ['name' => 'Call Disconnected',         'color' => '#fd7e14', 'requires_followup' => true],
             ['name' => 'Call back later',           'color' => '#ffc107', 'requires_followup' => true],
-            ['name' => 'Wrong Number',              'color' => '#dc3545', 'is_lost' => true],
             ['name' => 'Switch Off',                'color' => '#fd7e14', 'requires_followup' => true],
             ['name' => 'Busy',                      'color' => '#fd7e14', 'requires_followup' => true],
             ['name' => 'Blank Call',                'color' => '#fd7e14', 'requires_followup' => true],
             ['name' => 'Not reachable',             'color' => '#fd7e14', 'requires_followup' => true],
+            // One stop outcome; the reason is its sub-disposition.
+            ['name' => 'Stop call',                 'color' => '#dc3545', 'is_lost' => true, 'reasons' => [
+                'Not interested', 'Wrong number', 'Invalid number', 'Do not disturb', 'Fake lead',
+                'Not looking for treatment', 'Not inquired', 'Location not preferred',
+                'Already pregnant', 'Budget issue', 'Competitor chosen', 'Not planning now',
+            ]],
         ];
     }
 
@@ -62,7 +60,7 @@ class DispositionSeeder extends Seeder
                 ? PipelineStage::where('slug', $item['stage_slug'])->value('id')
                 : null;
 
-            Disposition::updateOrCreate(
+            $parent = Disposition::updateOrCreate(
                 ['slug' => $slug],
                 [
                     'name'              => $item['name'],
@@ -77,6 +75,26 @@ class DispositionSeeder extends Seeder
                     'is_active'         => true,
                 ]
             );
+
+            foreach ($item['reasons'] ?? [] as $j => $reason) {
+                $childSlug = $slug . '-' . Str::slug($reason);
+                $slugs[]   = $childSlug;
+
+                Disposition::updateOrCreate(
+                    ['slug' => $childSlug],
+                    [
+                        'name'              => $reason,
+                        'parent_id'         => $parent->id,
+                        'requires_remark'   => true,
+                        'requires_followup' => false,
+                        'is_won'            => false,
+                        'is_lost'           => $item['is_lost'] ?? false,
+                        'sort_order'        => ($j + 1) * 10,
+                        'color'             => $item['color'],
+                        'is_active'         => true,
+                    ]
+                );
+            }
         }
 
         Disposition::whereNotIn('slug', $slugs)->update(['is_active' => false]);

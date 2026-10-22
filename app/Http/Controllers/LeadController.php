@@ -444,7 +444,12 @@ class LeadController extends Controller
     {
         $request->validate([
             'disposition_id'     => ['required', 'exists:dispositions,id'],
-            'sub_disposition_id' => ['nullable', 'exists:dispositions,id'],
+            // A stop-call outcome needs its reason (the sub-disposition).
+            'sub_disposition_id' => [
+                \Illuminate\Validation\Rule::requiredIf(fn () => Disposition::whereKey($request->disposition_id)->value('is_lost')
+                    && Disposition::where('parent_id', $request->disposition_id)->where('is_active', true)->exists()),
+                'nullable', 'exists:dispositions,id',
+            ],
             'remark'             => ['required', 'string', 'min:3'],
             // Every outcome needs a callback time, except the ones that stop calling.
             'next_follow_up_at'  => [
@@ -452,7 +457,8 @@ class LeadController extends Controller
                 'nullable', 'date', 'after:now', new \App\Rules\WithinCallHours(),
             ],
         ], [
-            'next_follow_up_at.required' => 'Pick when to call back: a follow-up time is needed for every disposition except the ones that stop calling.',
+            'next_follow_up_at.required'  => 'Pick when to call back: a follow-up time is needed for every disposition except the ones that stop calling.',
+            'sub_disposition_id.required' => 'Pick the reason for stopping calls.',
         ]);
 
         $this->service->updateDisposition(

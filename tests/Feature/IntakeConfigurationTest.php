@@ -86,15 +86,23 @@ class IntakeConfigurationTest extends TestCase
     {
         (new DispositionSeeder)->run();
 
-        $active = Disposition::where('is_active', true)->get();
+        $active   = Disposition::where('is_active', true)->get();
+        $primary  = $active->whereNull('parent_id');
+        $stopCall = $primary->firstWhere('slug', 'stop-call');
 
-        $this->assertCount(21, $active);
-        $this->assertTrue($active->every(fn ($d) => $d->parent_id === null), 'No sub-dispositions expected.');
+        // 13 call outcomes plus one "Stop call", whose reasons are its sub-dispositions.
+        $this->assertCount(14, $primary);
+        $this->assertNotNull($stopCall);
+        $this->assertTrue((bool) $stopCall->is_lost);
+        $this->assertFalse((bool) $stopCall->requires_followup);
+        $this->assertCount(12, $active->where('parent_id', $stopCall->id));
+        $this->assertTrue($active->whereNotNull('parent_id')->every(fn ($d) => $d->parent_id === $stopCall->id), 'Only Stop call has sub-dispositions.');
 
-        $names = $active->sortBy('sort_order')->pluck('name')->values()->all();
+        $names = $primary->sortBy('sort_order')->pluck('name')->values()->all();
         $this->assertSame('Visit done', $names[0]);
-        $this->assertSame('Not reachable', end($names));
+        $this->assertSame('Stop call', end($names));
         $this->assertContains('Appointment Booked', $names);
+        $this->assertNotContains('Not interested', $names, 'Lost outcomes live under Stop call now.');
 
         $this->assertTrue(Disposition::where('slug', 'warm-lead')->value('requires_followup'));
         $this->assertTrue(Disposition::where('slug', 'wrong-number')->value('is_lost'));

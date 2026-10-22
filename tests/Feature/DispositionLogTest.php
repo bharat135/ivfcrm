@@ -61,9 +61,21 @@ class DispositionLogTest extends TestCase
             'disposition_id' => $callback->id, 'remark' => 'No time given',
         ])->assertUnprocessable()->assertJsonValidationErrors('next_follow_up_at');
 
+        // Stopping calls needs no time, but it does need the reason when the
+        // disposition offers them (Stop call → Not interested, ...).
+        $reason = $stop->children()->where('is_active', true)->first();
+        if ($reason) {
+            $this->actingAs($telecaller)->postJson(route('leads.disposition', $lead), [
+                'disposition_id' => $stop->id, 'remark' => 'Do not call again',
+            ])->assertUnprocessable()->assertJsonValidationErrors('sub_disposition_id');
+        }
+
         $this->actingAs($telecaller)->postJson(route('leads.disposition', $lead), [
-            'disposition_id' => $stop->id, 'remark' => 'Do not call again',
+            'disposition_id' => $stop->id, 'sub_disposition_id' => $reason?->id, 'remark' => 'Do not call again',
         ])->assertOk();
+
+        $entry = LeadActivity::where('lead_id', $lead->id)->where('type', 'status')->latest('id')->first();
+        $this->assertStringStartsWith($stop->name . ($reason ? ' › ' . $reason->name : ''), $entry->description);
     }
 
     public function test_the_name_can_be_changed_from_the_record_card(): void

@@ -405,7 +405,8 @@ class TataTeleservicesTest extends TestCase
         $this->assertNotNull($calls->pendingDisposition($this->admin->fresh()));
 
         $this->actingAs($this->admin)->postJson(route('leads.disposition', $lead), [
-            'disposition_id' => $disp->id, 'remark' => 'booked',
+            'disposition_id'    => $disp->id, 'remark' => 'booked',
+            'next_follow_up_at' => now()->addDay()->setTime(11, 0)->format('Y-m-d H:i'),
         ])->assertOk();
 
         $this->assertSame($disp->id, $call->fresh()->disposition_id);

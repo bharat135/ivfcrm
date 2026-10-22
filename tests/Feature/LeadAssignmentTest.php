@@ -501,7 +501,11 @@ class LeadAssignmentTest extends TestCase
         $disposition = \App\Models\Disposition::where('is_active', true)->where('requires_followup', false)->first();
 
         $this->actingAs($this->telecaller)
-            ->postJson(route('leads.disposition', $lead), ['disposition_id' => $disposition->id, 'remark' => 'Spoke to the couple'])
+            ->postJson(route('leads.disposition', $lead), [
+                'disposition_id'    => $disposition->id,
+                'remark'            => 'Spoke to the couple',
+                'next_follow_up_at' => now()->addDay()->setTime(11, 0)->format('Y-m-d H:i'),
+            ])
             ->assertOk()
             ->assertJsonPath('next_url', route('leads.next', ['after' => $lead->id]));
     }
