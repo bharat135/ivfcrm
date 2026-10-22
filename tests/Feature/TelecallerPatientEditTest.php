@@ -74,6 +74,27 @@ class TelecallerPatientEditTest extends TestCase
         $this->assertSame($real, $lead->mobile);
     }
 
+    public function test_renaming_an_unknown_lead_renames_the_patient_profile(): void
+    {
+        // CSV sheets write "unknown" in the name column; the patient copied it.
+        $telecaller = $this->userWithRole('Telecaller');
+        $lead = Lead::create([
+            'name' => 'unknown', 'mobile' => '98765' . random_int(10000, 99999),
+            'status' => 'new', 'assigned_to' => $telecaller->id,
+        ]);
+        $patient = app(\App\Services\PatientLinker::class)->ensureFor($lead);
+        $this->assertSame('unknown', $patient->fresh()->wife_name);
+
+        $this->actingAs($telecaller)->put(route('leads.update', $lead), [
+            'name' => 'Trishul Shinde', 'age' => 35,
+        ])->assertSessionHasNoErrors();
+
+        $patient->refresh();
+        $this->assertSame('Trishul Shinde', $patient->wife_name);
+        $this->assertSame('Trishul Shinde', $patient->name);
+        $this->actingAs($telecaller)->get(route('leads.show', $lead))->assertOk()->assertSee('Trishul Shinde');
+    }
+
     public function test_a_role_without_patient_editing_cannot_change_a_patient(): void
     {
         $receptionist = $this->userWithRole('Receptionist');

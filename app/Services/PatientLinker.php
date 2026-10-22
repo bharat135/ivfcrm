@@ -153,7 +153,7 @@ class PatientLinker
         $dirty = [];
 
         foreach ($fill as $column => $value) {
-            if (! blank($value) && blank($patient->{$column})) {
+            if (! blank($value) && $this->isPlaceholder($patient->{$column})) {
                 $dirty[$column] = $value;
             }
         }
@@ -161,6 +161,54 @@ class PatientLinker
         if ($dirty !== []) {
             $patient->forceFill($dirty)->save();
         }
+    }
+
+    /**
+     * Someone edited the lead's contact details: the patient facet is the
+     * same person, so the fields they changed are copied across, overwriting.
+     * (Intake only fills blanks; a deliberate edit wins.)
+     */
+    public function syncContactFromLead(Lead $lead): void
+    {
+        $patient = $lead->patient;
+
+        if (! $patient) {
+            return;
+        }
+
+        $female = $lead->gender !== 'male';
+        $map = [
+            'name'       => $female ? 'wife_name' : 'husband_name',
+            'age'        => $female ? 'wife_age' : 'husband_age',
+            'mobile'     => 'mobile',
+            'alt_mobile' => 'alt_mobile',
+            'email'      => 'email',
+            'city_id'    => 'city_id',
+            'state_id'   => 'state_id',
+            'pincode'    => 'pincode',
+        ];
+
+        $dirty = [];
+
+        foreach ($map as $leadColumn => $patientColumn) {
+            if ($lead->wasChanged($leadColumn) && ! blank($lead->{$leadColumn})) {
+                $dirty[$patientColumn] = $lead->{$leadColumn};
+            }
+        }
+
+        if ($lead->wasChanged('mobile')) {
+            $dirty['dedup_hash'] = $this->hash($lead->mobile);
+        }
+
+        if ($dirty !== []) {
+            $patient->forceFill($dirty)->save();
+        }
+    }
+
+    /** Blank, or a stand-in such as the "unknown" lead sheets put in the name column. */
+    private function isPlaceholder($value): bool
+    {
+        return blank($value) || (is_string($value) && in_array(strtolower(trim($value)), ['unknown', 'na', 'n/a', '-'], true));
     }
 
     private function adopt(Lead $lead, Patient $patient, ?string $hash): void

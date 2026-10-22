@@ -399,6 +399,7 @@ class LeadController extends Controller
 
         $before = $lead->replicate();
         $lead->update($data);
+        $this->linker->syncContactFromLead($lead);
         $this->linker->syncCoupleDates($lead);
 
         if ($lead->wasChanged('center_id') && $lead->patient) {
