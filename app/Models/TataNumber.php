@@ -10,7 +10,7 @@ class TataNumber extends Model
 {
     protected $fillable = [
         'smartflo_id', 'did', 'name', 'description', 'alias', 'destination', 'destination_name',
-        'center_id', 'is_default', 'synced_at', 'raw',
+        'center_id', 'user_id', 'is_default', 'synced_at', 'raw',
     ];
 
     protected $casts = [
@@ -24,9 +24,18 @@ class TataNumber extends Model
         return $this->belongsTo(Center::class);
     }
 
-    /** The caller id to present for an agent: their center's DID, else the default, else none. */
-    public static function callerIdFor(?int $centerId): ?string
+    public function user(): BelongsTo
     {
+        return $this->belongsTo(User::class);
+    }
+
+    /** The caller id to present for an agent: their own DID, else their centre's, else the default, else none. */
+    public static function callerIdFor(?int $centerId, ?int $userId = null): ?string
+    {
+        if ($userId && $did = static::where('user_id', $userId)->value('did')) {
+            return $did;
+        }
+
         if ($centerId && $did = static::where('center_id', $centerId)->value('did')) {
             return $did;
         }

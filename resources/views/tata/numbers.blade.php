@@ -21,13 +21,23 @@
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-                <thead class="table-light"><tr><th>Number</th><th>Name</th><th>Routes to</th><th>Centre caller ID</th><th>Default</th></tr></thead>
+                <thead class="table-light"><tr><th>Number</th><th>Name</th><th>Routes to</th><th>Agent caller ID</th><th>Centre caller ID</th><th>Default</th></tr></thead>
                 <tbody>
                 @forelse($numbers as $number)
                     <tr>
                         <td class="font-monospace">{{ $number->did }}</td>
                         <td>{{ $number->name ?: '—' }}</td>
                         <td class="small text-muted">{{ $number->destination_name ?: $number->destination ?: '—' }}</td>
+                        <td>
+                            @can('tata.edit')
+                            <select class="form-select form-select-sm js-agent" data-url="{{ route('tata.numbers.update', $number) }}" style="max-width:220px">
+                                <option value="">— none —</option>
+                                @foreach($agents as $a)<option value="{{ $a->id }}" @selected($number->user_id === $a->id)>{{ $a->name }}</option>@endforeach
+                            </select>
+                            @else
+                                {{ $number->user?->name ?? '—' }}
+                            @endcan
+                        </td>
                         <td>
                             @can('tata.edit')
                             <select class="form-select form-select-sm js-center" data-url="{{ route('tata.numbers.update', $number) }}" style="max-width:220px">
@@ -47,13 +57,13 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" class="text-center text-muted py-4">No numbers yet. Pull from Smartflo.</td></tr>
+                    <tr><td colspan="6" class="text-center text-muted py-4">No numbers yet. Pull from Smartflo.</td></tr>
                 @endforelse
                 </tbody>
             </table>
         </div>
     </div>
-    <div class="card-footer bg-white small text-muted">A DID assigned to a centre is used as the caller ID for that centre's agents; otherwise the default DID is shown.</div>
+    <div class="card-footer bg-white small text-muted">Caller ID for a call: the agent's own DID, else the DID of the agent's centre, else the default. Inbound routing ("Routes to") is set in the Smartflo portal.</div>
 </div>
 
 <div class="row g-3">
@@ -102,6 +112,10 @@ $(function () {
     $('.js-center').on('change', function () {
         $.ajax({ url: $(this).data('url'), method: 'PATCH', data: { center_id: this.value, _token: @json(csrf_token()) } })
             .done(res => toastr.success(res.message)).fail(() => toastr.error('Could not save.'));
+    });
+    $('.js-agent').on('change', function () {
+        $.ajax({ url: $(this).data('url'), method: 'PATCH', data: { user_id: this.value, _token: @json(csrf_token()) } })
+            .done(res => { toastr.success(res.message); setTimeout(() => location.reload(), 700); }).fail(() => toastr.error('Could not save.'));
     });
 });
 </script>

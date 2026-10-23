@@ -98,10 +98,10 @@ class CallService
         }
     }
 
-    /** Caller id for a Tata call: the agent's centre DID, else the default DID, else the account setting. */
+    /** Caller id for a Tata call: the agent's own DID, else their centre's, else the default DID, else the account setting. */
     public function tataCallerIdFor(User $agent): ?string
     {
-        return \App\Models\TataNumber::callerIdFor($agent->center_id) ?: $this->tata->callerId();
+        return \App\Models\TataNumber::callerIdFor($agent->center_id, $agent->id) ?: $this->tata->callerId();
     }
 
     /**
