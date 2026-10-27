@@ -80,3 +80,7 @@ Schedule::job(new \App\Jobs\DelegateLeaveFollowUpsJob)->everyFifteenMinutes()->n
 // Keep the Tata Smartflo access token fresh so panel calls never hit an expired
 // token. Runs often; the command itself only re-mints when near expiry.
 Schedule::command('tata:refresh-token')->everyThirtyMinutes()->withoutOverlapping();
+
+// Backfill Smartflo call records: missed inbound calls reach the CRM even when
+// the webhook is not set up or drops an event.
+Schedule::command('tata:pull-calls')->everyFiveMinutes()->withoutOverlapping()->runInBackground();
