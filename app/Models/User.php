@@ -57,6 +57,7 @@ class User extends Authenticatable
             'is_available' => 'boolean',
             'daily_lead_cap' => 'integer',
             'call_status_changed_at' => 'datetime',
+            'missed_calls_seen_at' => 'datetime',
             // A Smartflo API key: never readable from a database dump.
             'tata_c2c_support_key' => 'encrypted',
             'meta' => 'array',

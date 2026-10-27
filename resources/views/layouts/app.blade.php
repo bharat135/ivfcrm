@@ -121,8 +121,19 @@
         </a>
         @endcan
         @can('call_logs.view')
-        <a href="{{ route('call_logs.index') }}" class="nav-link {{ request()->routeIs('call_logs.*') ? 'active' : '' }}">
+        <a href="{{ route('call_logs.index') }}" class="nav-link {{ request()->routeIs('call_logs.*') && ! request()->routeIs('call_logs.missed') ? 'active' : '' }}">
             <i class="bi bi-telephone"></i> <span>Call Logs</span>
+        </a>
+        <a href="{{ route('call_logs.missed') }}" class="nav-link {{ request()->routeIs('call_logs.missed') ? 'active' : '' }}">
+            <i class="bi bi-telephone-x"></i> <span>Missed Calls</span>
+            @php
+                // Opening the page stamps missed_calls_seen_at, which clears this.
+                $missedNew = request()->routeIs('call_logs.missed') ? 0 : \App\Models\CallLog::missed()
+                    ->missedVisibleTo(auth()->user())
+                    ->when(auth()->user()->missed_calls_seen_at, fn ($q, $seen) => $q->where('started_at', '>', $seen))
+                    ->count();
+            @endphp
+            @if($missedNew > 0)<span class="badge-count">{{ $missedNew }}</span>@endif
         </a>
         @endcan
         @can('call_logs.view')

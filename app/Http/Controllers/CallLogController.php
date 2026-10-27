@@ -59,6 +59,46 @@ class CallLogController extends Controller
         ]);
     }
 
+    /**
+     * Missed Smartflo calls. Opening the page clears the sidebar count: it
+     * only counts what came in after the agent last looked.
+     */
+    public function missed(Request $request)
+    {
+        if ($request->ajax() || $request->wantsJson()) {
+            $seenBefore = $request->date('seen');
+
+            $query = CallLog::missed()
+                ->missedVisibleTo($request->user())
+                ->with(['lead:id,name,mobile', 'patient:id,wife_name,husband_name', 'user:id,name'])
+                ->when($request->filled('user_id'), fn ($q) => $q->where('user_id', $request->integer('user_id')))
+                ->when($request->filled('from'), fn ($q) => $q->whereDate('started_at', '>=', $request->date('from')))
+                ->when($request->filled('to'), fn ($q) => $q->whereDate('started_at', '<=', $request->date('to')))
+                ->select('call_logs.*');
+
+            return DataTables::of($query)
+                ->addColumn('contact', fn (CallLog $c) => view('calllogs._contact', ['call' => $c])->render()
+                    . (! $seenBefore || $c->started_at?->gt($seenBefore) ? '<span class="badge bg-danger ms-4">New</span>' : ''))
+                ->addColumn('agent', fn (CallLog $c) => e($c->user?->name ?? 'Unassigned'))
+                ->addColumn('status_badge', fn (CallLog $c) =>
+                    '<span class="badge bg-' . $c->statusBadge() . '">' . e($c->status ?: '—') . '</span>')
+                ->addColumn('ring_fmt', fn (CallLog $c) => $c->formatSeconds($c->ring_seconds ?: $c->duration_seconds))
+                ->addColumn('when', fn (CallLog $c) => $c->started_at?->format('d M Y, h:i A'))
+                ->addColumn('action', fn (CallLog $c) => view('calllogs._actions', ['call' => $c])->render())
+                ->rawColumns(['contact', 'status_badge', 'action'])
+                ->make(true);
+        }
+
+        $user = $request->user();
+        $seenBefore = $user->missed_calls_seen_at;
+        $user->forceFill(['missed_calls_seen_at' => now()])->saveQuietly();
+
+        return view('calllogs.missed', [
+            'seenBefore' => $seenBefore,
+            'agents'     => User::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+        ]);
+    }
+
     public function show(CallLog $call)
     {
         abort_unless(

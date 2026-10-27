@@ -80,6 +80,7 @@ Route::middleware(['auth', 'single.device'])->group(function () {
     Route::prefix('call-logs')->name('call_logs.')->group(function () {
         Route::get('/', [CallLogController::class, 'index'])->name('index');
         Route::post('/', [CallLogController::class, 'store'])->name('store');
+        Route::get('/missed', [CallLogController::class, 'missed'])->name('missed');
         Route::get('/{call}', [CallLogController::class, 'show'])->name('show');
     });
 

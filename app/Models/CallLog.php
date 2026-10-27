@@ -171,6 +171,29 @@ class CallLog extends Model
         return $query->whereIn('status', ['ringing', 'answered', 'in_progress']);
     }
 
+    /** Inbound Smartflo calls that rang out without anyone picking up. */
+    public function scopeMissed($query)
+    {
+        return $query->where('provider', 'tata')
+            ->where('direction', 'inbound')
+            ->whereNotNull('ended_at')
+            ->whereNotIn('status', ['completed', 'answered', 'ringing', 'in_progress'])
+            ->where(fn ($q) => $q->whereNull('talk_seconds')->orWhere('talk_seconds', 0));
+    }
+
+    /**
+     * Like visibleTo, but a missed call no agent was matched to (it rang a
+     * queue) is everyone's to call back.
+     */
+    public function scopeMissedVisibleTo($query, User $user)
+    {
+        if ($user->hasRole(['Super Admin', 'Admin', 'Management', 'Marketing Head', 'Center Manager', 'Call Quality Analyst'])) {
+            return $query;
+        }
+
+        return $query->where(fn ($q) => $q->where('user_id', $user->id)->orWhereNull('user_id'));
+    }
+
     public function scopeForUser($query, $userId)
     {
         return $query->where('user_id', $userId);
