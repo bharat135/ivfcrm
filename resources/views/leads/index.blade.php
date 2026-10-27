@@ -83,6 +83,18 @@
                     @endforeach
                 </select>
             </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" id="filterDisposition">
+                    <option value="">All Last Dispositions</option>
+                    <option value="none">Not dispositioned yet</option>
+                    @foreach($dispositions as $d)
+                        <option value="{{ $d->id }}">{{ $d->name }}</option>
+                        @foreach($d->children as $child)
+                            <option value="s{{ $child->id }}">&nbsp;&nbsp;&nbsp;↳ {{ $child->name }}</option>
+                        @endforeach
+                    @endforeach
+                </select>
+            </div>
             <div class="col-md-1">
                 <button class="btn btn-outline-secondary btn-sm w-100" id="resetFilters">Reset</button>
             </div>
@@ -174,6 +186,7 @@ const leadsTable = $('#leadsTable').DataTable({
             d.center_id   = $('#filterCenter').val();
             d.status      = $('#filterStatus').val();
             d.assigned_to = $('#filterAssigned').val();
+            d.disposition = $('#filterDisposition').val();
         }
     },
     columns: [
@@ -216,9 +229,9 @@ const leadsTable = $('#leadsTable').DataTable({
 });
 
 // Reload on filter change
-$('#filterChannel,#filterSource,#filterStage,#filterCenter,#filterStatus,#filterAssigned').on('change', () => leadsTable.ajax.reload());
+$('#filterChannel,#filterSource,#filterStage,#filterCenter,#filterStatus,#filterAssigned,#filterDisposition').on('change', () => leadsTable.ajax.reload());
 $('#resetFilters').on('click', function() {
-    $('#filterChannel,#filterSource,#filterStage,#filterCenter,#filterStatus,#filterAssigned').val('');
+    $('#filterChannel,#filterSource,#filterStage,#filterCenter,#filterStatus,#filterAssigned,#filterDisposition').val('');
     leadsTable.ajax.reload();
 });
 

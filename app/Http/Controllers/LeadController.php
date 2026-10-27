@@ -90,8 +90,10 @@ class LeadController extends Controller
         $centers     = Center::active()->get();
         $telecallers = User::active()->whereHas('roles', fn($q) => $q->whereIn('name', ['Telecaller', 'Counsellor', 'Call Quality Analyst']))->get();
         $channels    = AcquisitionChannel::options();
+        $dispositions = Disposition::active()->primary()->orderBy('sort_order')
+            ->with(['children' => fn ($q) => $q->active()])->get();
 
-        return view('leads.index', compact('sources', 'stages', 'centers', 'telecallers', 'channels'));
+        return view('leads.index', compact('sources', 'stages', 'centers', 'telecallers', 'channels', 'dispositions'));
     }
 
     /**
@@ -192,7 +194,18 @@ class LeadController extends Controller
             ->when($request->filled('stage_id'), fn ($q) => $q->where('stage_id', $request->stage_id))
             ->when($request->filled('center_id'), fn ($q) => $q->where('center_id', $request->center_id))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
-            ->when($request->filled('assigned_to'), fn ($q) => $q->where('assigned_to', $request->assigned_to));
+            ->when($request->filled('assigned_to'), fn ($q) => $q->where('assigned_to', $request->assigned_to))
+            // The lead's current disposition is its last one. "none" = never
+            // dispositioned; "s<id>" = a sub-disposition (a stop-call reason).
+            ->when($request->filled('disposition'), function ($q) use ($request) {
+                $value = (string) $request->disposition;
+
+                match (true) {
+                    $value === 'none'            => $q->whereNull('disposition_id'),
+                    str_starts_with($value, 's') => $q->where('sub_disposition_id', (int) substr($value, 1)),
+                    default                      => $q->where('disposition_id', (int) $value),
+                };
+            });
     }
 
     /**
