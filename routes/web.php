@@ -81,6 +81,8 @@ Route::middleware(['auth', 'single.device'])->group(function () {
         Route::get('/', [CallLogController::class, 'index'])->name('index');
         Route::post('/', [CallLogController::class, 'store'])->name('store');
         Route::get('/missed', [CallLogController::class, 'missed'])->name('missed');
+        Route::get('/missed-tray', [CallLogController::class, 'missedTray'])->name('missed_tray');
+        Route::post('/missed-seen', [CallLogController::class, 'markMissedSeen'])->name('missed_seen');
         Route::get('/{call}', [CallLogController::class, 'show'])->name('show');
     });
 

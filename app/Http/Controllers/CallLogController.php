@@ -99,6 +99,42 @@ class CallLogController extends Controller
         ]);
     }
 
+    /** Navbar tray: the latest missed calls and how many are new since last seen. */
+    public function missedTray(Request $request)
+    {
+        $user = $request->user();
+        $seen = $user->missed_calls_seen_at;
+
+        $calls = CallLog::missed()
+            ->missedVisibleTo($user)
+            ->with(['lead:id,name,mobile', 'patient:id,wife_name,husband_name', 'user:id,name'])
+            ->latest('started_at')
+            ->limit(20)
+            ->get();
+
+        return response()->json([
+            'count' => CallLog::missed()->missedVisibleTo($user)
+                ->when($seen, fn ($q) => $q->where('started_at', '>', $seen))
+                ->count(),
+            'calls' => $calls->map(fn (CallLog $c) => [
+                'name'   => $c->contactName(),
+                'number' => \App\Support\PhoneNumber::display($c->contactNumber()),
+                'agent'  => $c->user?->name ?? 'Unassigned',
+                'when'   => $c->started_at?->diffForHumans(),
+                'new'    => ! $seen || $c->started_at?->gt($seen),
+                'url'    => route('call_logs.show', $c),
+            ]),
+        ]);
+    }
+
+    /** Opening the tray counts as seeing the missed calls. */
+    public function markMissedSeen(Request $request)
+    {
+        $request->user()->forceFill(['missed_calls_seen_at' => now()])->saveQuietly();
+
+        return response()->json(['success' => true]);
+    }
+
     public function show(CallLog $call)
     {
         abort_unless(

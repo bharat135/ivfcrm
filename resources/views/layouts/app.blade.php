@@ -133,7 +133,7 @@
                     ->when(auth()->user()->missed_calls_seen_at, fn ($q, $seen) => $q->where('started_at', '>', $seen))
                     ->count();
             @endphp
-            @if($missedNew > 0)<span class="badge-count">{{ $missedNew }}</span>@endif
+            @if($missedNew > 0)<span class="badge-count" id="navMissedSide">{{ $missedNew }}</span>@endif
         </a>
         @endcan
         @can('call_logs.view')
@@ -413,6 +413,24 @@
         @endcan
 
         @can('call_logs.view')
+            {{-- Missed-calls tray: everyone's for supervisors, own + unassigned for agents --}}
+            <div class="dropdown">
+                <button class="btn btn-sm btn-link position-relative px-2" id="navMissed" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Missed calls">
+                    <i class="bi bi-telephone-x text-danger" style="font-size:16px"></i>
+                    <span class="badge rounded-pill bg-danger position-absolute top-0 start-100 translate-middle d-none" id="navMissedCount" style="font-size:10px">0</span>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end shadow p-0" style="min-width:340px; max-height:440px; overflow:hidden">
+                    <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center bg-light">
+                        <span class="fw-semibold small">Missed calls</span>
+                        <span class="badge bg-danger" id="navMissedHeaderCount">0 new</span>
+                    </div>
+                    <div id="navMissedList" style="max-height:340px; overflow-y:auto">
+                        <div class="text-center text-muted small py-4"><span class="spinner-border spinner-border-sm"></span></div>
+                    </div>
+                    <a href="{{ route('call_logs.missed') }}" class="d-block text-center border-top py-2 small text-decoration-none">View all missed calls</a>
+                </div>
+            </div>
+
             @include('telephony._dialer')
             @include('telephony._websoftphone')
         @endcan
@@ -480,6 +498,50 @@ $(function () {
     loadTray();
     setInterval(loadTray, 30000);
     $('#navAssigned').on('click', loadTray);
+});
+</script>
+@endpush
+@endcan
+
+@can('call_logs.view')
+@push('scripts')
+<script>
+$(function () {
+    // ---- Missed-calls tray ----
+    const missedUrl  = @json(route('call_logs.missed_tray'));
+    const missedSeen = @json(route('call_logs.missed_seen'));
+    const esc = s => $('<div>').text(s ?? '').html();
+
+    function showMissedCount(n) {
+        $('#navMissedHeaderCount').text(n + ' new');
+        $('#navMissedCount').text(n > 99 ? '99+' : n).toggleClass('d-none', n < 1);
+        $('#navMissedSide').text(n).toggleClass('d-none', n < 1);
+    }
+
+    function loadMissed(markSeen) {
+        $.get(missedUrl).done(res => {
+            showMissedCount(res.count);
+
+            $('#navMissedList').html(res.calls.length ? res.calls.map(c => `
+                <a href="${c.url}" class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none border-bottom ${c.new ? 'bg-danger-subtle' : ''}">
+                    <i class="bi bi-telephone-x text-danger" style="font-size:16px"></i>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="small fw-semibold text-truncate text-dark">${esc(c.name)}${c.new ? ' <span class="badge bg-danger ms-1" style="font-size:9px">New</span>' : ''}</div>
+                        <div class="text-muted" style="font-size:11px">${esc(c.number)} · ${esc(c.agent)} · ${esc(c.when)}</div>
+                    </div>
+                </a>`).join('')
+                : '<div class="text-center text-muted small py-4"><i class="bi bi-check2-circle d-block mb-1" style="font-size:1.5rem"></i>No missed calls</div>');
+
+            // Seeing the list clears the count; the rows keep their "New" mark until next open.
+            if (markSeen && res.count > 0) {
+                $.post(missedSeen).done(() => showMissedCount(0));
+            }
+        });
+    }
+
+    loadMissed(false);
+    setInterval(() => loadMissed(false), 30000);
+    $('#navMissed').on('click', () => loadMissed(true));
 });
 </script>
 @endpush
