@@ -78,6 +78,8 @@ class CallService
             ->whereNull('disposition_id')
             ->whereNotNull('ended_at')
             ->where('provider', '!=', 'manual')
+            // A missed inbound call never reached the agent: nothing to log.
+            ->where(fn ($q) => $q->where('direction', 'outbound')->orWhereNotNull('answered_at'))
             ->where('ended_at', '>=', now()->subHours(48))
             ->latest('ended_at')
             ->first();
@@ -700,7 +702,9 @@ class CallService
             'is_recorded'      => $provider === 'tata',
         ]);
 
-        if ($agent) {
+        // A call pulled from the CDR is already over: it says nothing about
+        // what the agent is doing now.
+        if ($agent && empty($data['backfill'])) {
             $this->setAgentStatus($agent, 'ringing', $call);
         }
 
@@ -771,7 +775,7 @@ class CallService
             ])),
         ]);
 
-        if ($call->user) {
+        if ($call->user && empty($data['backfill'])) {
             $this->setAgentStatus($call->user, 'on_call', $call);
         }
 
@@ -816,7 +820,7 @@ class CallService
                 'is_recorded'      => ! empty($data['recording_url']) || ! empty($data['recording_path']) ? true : null,
             ], fn ($v) => $v !== null));
 
-            if ($call->user) {
+            if ($call->user && empty($data['backfill'])) {
                 // With mandatory outcomes, wrap-up holds the agent until the
                 // call is dispositioned. Otherwise they are free straight away:
                 // the outcome is logged from the lead's profile whenever they

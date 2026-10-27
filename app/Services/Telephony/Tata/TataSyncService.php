@@ -784,6 +784,9 @@ class TataSyncService
         $talk     = (int) ($row['answered_seconds'] ?? $row['billsec'] ?? 0);
 
         $data = [
+            // ref_id is the id click-to-call returned: it ties the record to
+            // the row the CRM opened when it placed the call.
+            'provider_call_id' => isset($row['ref_id']) ? (string) $row['ref_id'] : null,
             'channel_id'   => $callId,
             'linked_id'    => $uuid,
             'provider'     => 'tata',
@@ -792,6 +795,7 @@ class TataSyncService
             'to_number'    => $direction === 'inbound' ? ($row['did_number'] ?? null) : ($row['client_number'] ?? null),
             'agent_number' => $row['agent_number'] ?? null,
             'started_at'   => $start,
+            'backfill'     => true,
         ];
 
         $call = $this->calls->locate($data);
@@ -810,21 +814,37 @@ class TataSyncService
             return 'unchanged';
         }
 
+        // An ended call (hung up from the CRM) only gets what it is missing:
+        // finalizing it again would log the call to the lead a second time.
+        if ($call->ended_at) {
+            $call->update(array_filter([
+                'answered_at'      => $answered && ! $call->answered_at ? $start : null,
+                'status'           => $answered && ! $call->talk_seconds ? 'completed' : null,
+                'talk_seconds'     => ! $call->talk_seconds && $talk ? $talk : null,
+                'duration_seconds' => ! $call->duration_seconds && $duration ? $duration : null,
+                'recording_url'    => ! $call->recording_url ? ($row['recording_url'] ?? null) : null,
+                'is_recorded'      => ! $call->recording_url && ! empty($row['recording_url']) ? true : null,
+                'channel_id'       => $call->channel_id ?: $callId,
+                'linked_id'        => $call->linked_id ?: $uuid,
+            ], fn ($v) => $v !== null));
+
+            return $status;
+        }
+
         if ($answered && ! $call->answered_at) {
-            $this->calls->markAnswered($call, ['timestamp' => $start, 'channel_id' => $callId, 'linked_id' => $uuid]);
+            $this->calls->markAnswered($call, ['timestamp' => $start, 'channel_id' => $callId, 'linked_id' => $uuid, 'backfill' => true]);
             $call->refresh();
         }
 
-        if (! $call->ended_at || ! $call->recording_url) {
-            $this->calls->finalize($call, array_filter([
-                'timestamp'        => $end ?: ($start ? Carbon::parse($start)->addSeconds($duration)->toDateTimeString() : null),
-                'talk_seconds'     => $talk,
-                'duration_seconds' => $duration ?: null,
-                'hangup_cause'     => $row['hangup_cause'] ?? null,
-                'status'           => $answered ? 'completed' : 'no-answer',
-                'recording_url'    => $row['recording_url'] ?? null,
-            ], fn ($v) => $v !== null));
-        }
+        $this->calls->finalize($call, array_filter([
+            'timestamp'        => $end ?: ($start ? Carbon::parse($start)->addSeconds($duration)->toDateTimeString() : null),
+            'talk_seconds'     => $talk,
+            'duration_seconds' => $duration ?: null,
+            'hangup_cause'     => $row['hangup_cause'] ?? null,
+            'status'           => $answered ? 'completed' : 'no-answer',
+            'recording_url'    => $row['recording_url'] ?? null,
+            'backfill'         => true,
+        ], fn ($v) => $v !== null));
 
         return $status;
     }
