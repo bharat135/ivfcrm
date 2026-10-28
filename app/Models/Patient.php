@@ -50,11 +50,8 @@ class Patient extends Model
     protected static function booted(): void
     {
         static::creating(function (Patient $patient) {
-            if (empty($patient->patient_code)) {
-                $patient->patient_code = 'PAT-' . str_pad(
-                    (Patient::withTrashed()->max('id') ?? 0) + 1, 6, '0', STR_PAD_LEFT
-                );
-            }
+            // No patient ID yet: an enquiry only becomes a patient, and gets
+            // its ID, when the couple first visits. See register().
 
             // The same normalisation leads use, so one person cannot end up
             // with a lead row and an unrelated patient row for one number.
@@ -64,6 +61,47 @@ class Patient extends Model
 
             $patient->first_enquiry_at = $patient->first_enquiry_at ?: now();
         });
+    }
+
+    /**
+     * Turn the enquiry into a patient: stamp the first visit and issue the
+     * next patient ID. Idempotent, so every visit path can call it.
+     */
+    public function register(): self
+    {
+        if ($this->registered_at && $this->patient_code) {
+            return $this;
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () {
+            $this->patient_code = $this->patient_code ?: static::nextCode();
+            $this->registered_at = $this->registered_at ?: now();
+            $this->saveQuietly();
+        });
+
+        return $this;
+    }
+
+    public function isRegistered(): bool
+    {
+        return $this->registered_at !== null;
+    }
+
+    /** Next free PAT-nnnnnn, numbered on from the highest ID ever issued. */
+    private static function nextCode(): string
+    {
+        $last = static::withTrashed()
+            ->where('patient_code', 'like', 'PAT-%')
+            ->lockForUpdate()
+            ->selectRaw('MAX(CAST(SUBSTRING(patient_code, 5) AS UNSIGNED)) AS n')
+            ->value('n');
+
+        return 'PAT-' . str_pad((string) (((int) $last) + 1), 6, '0', STR_PAD_LEFT);
+    }
+
+    public function scopeRegistered($query)
+    {
+        return $query->whereNotNull('patients.registered_at');
     }
 
     public function getNameAttribute(): string
@@ -124,6 +162,7 @@ class Patient extends Model
             'infertility_duration_months' => 'integer',
             'previous_ivf' => 'boolean',
             'first_enquiry_at' => 'datetime',
+            'registered_at'    => 'datetime',
             'meta' => 'array',
         ];
     }

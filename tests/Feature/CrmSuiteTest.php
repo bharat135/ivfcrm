@@ -489,7 +489,7 @@ class CrmSuiteTest extends TestCase
     // Patients
     // =================================================================
 
-    public function test_a_patient_gets_a_generated_code_and_a_detail_page(): void
+    public function test_a_patient_gets_a_generated_code_at_registration_and_a_detail_page(): void
     {
         $patient = Patient::create([
             'wife_name' => 'Suite Patient',
@@ -498,6 +498,9 @@ class CrmSuiteTest extends TestCase
             'status'    => 'active',
         ]);
 
+        // The ID is issued at the first visit, not when the record is opened.
+        $this->assertNull($patient->patient_code);
+        $patient->register();
         $this->assertStringStartsWith('PAT-', $patient->patient_code);
         $this->assertSame('Suite Patient', $patient->name);
 

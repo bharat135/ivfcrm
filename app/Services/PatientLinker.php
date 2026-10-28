@@ -68,6 +68,17 @@ class PatientLinker
     }
 
     /**
+     * The couple walked in: the enquiry becomes a patient and gets its ID.
+     * Until then the person lives on the lead side only.
+     */
+    public function registerVisit(Lead|Patient $subject): ?Patient
+    {
+        $patient = $subject instanceof Lead ? $this->ensureFor($subject) : $subject;
+
+        return $patient?->register();
+    }
+
+    /**
      * Move a person forward in the funnel. Never moves them backwards, so a
      * late-arriving webhook cannot demote someone already in treatment.
      */

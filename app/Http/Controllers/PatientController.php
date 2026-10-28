@@ -166,17 +166,12 @@ class PatientController extends Controller
     }
 
     /**
-     * The patient list is for people who have booked a consultation; every
+     * The patient list is for people who have visited the clinic; every
      * other enquiry stays on the enquiries screen.
      */
     private function bookedOnly($query): void
     {
-        $query->where(function ($q) {
-            $q->whereIn('patients.journey_stage', [PatientJourney::CONSULTATION, PatientJourney::TREATMENT, PatientJourney::CLOSED])
-                ->orWhereExists(fn ($s) => $s->selectRaw('1')->from('appointments')
-                    ->whereNull('appointments.deleted_at')
-                    ->whereColumn('appointments.patient_id', 'patients.id'));
-        });
+        $query->whereNotNull('patients.registered_at');
     }
 
     private function applyFilters($query, Request $request): void
@@ -262,7 +257,8 @@ class PatientController extends Controller
             $patient->forceFill(['husband_name' => $data['husband_name']])->save();
         }
 
-        // Somebody standing at the desk is further along than a cold enquiry.
+        // Somebody standing at the desk has visited: they are a patient now.
+        $this->linker->registerVisit($patient ?? $lead);
         $this->linker->advance($patient, PatientJourney::CONSULTATION, 'registered at the front desk');
 
         return response()->json([

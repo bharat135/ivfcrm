@@ -194,7 +194,7 @@ const leadsTable = $('#leadsTable').DataTable({
           render: (d, t, row) => `<input type="checkbox" class="form-check-input lead-check" value="${row.id}">` },
         { data: 'name', defaultContent: '<span class="text-muted">—</span>',
           render: (d, t, row) => {
-              const code = row.patient ? `<div class="text-muted small">${row.patient.patient_code}</div>` : '';
+              const code = row.patient?.patient_code ? `<div class="text-muted small">${row.patient.patient_code}</div>` : '';
               return `<a href="/leads/${row.id}" class="text-decoration-none fw-semibold">${d || row.mobile}</a>${code}`;
           } },
         { data: 'mobile' },

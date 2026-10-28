@@ -96,6 +96,37 @@ class Lead extends Model
         return $this->morphMany(Taggable::class, 'taggable');
     }
 
+    /**
+     * The campaign this person came in on, by whatever name the intake path
+     * left behind: the mirrored campaign, the UTM tag, the first touch, or a
+     * Meta campaign that was mirrored after the lead arrived.
+     */
+    public function campaignLabel(): ?string
+    {
+        if ($this->campaign?->name) {
+            return $this->campaign->name;
+        }
+
+        if (filled($this->utm_campaign)) {
+            return $this->utm_campaign;
+        }
+
+        $touch = $this->sourceTouches->first(fn ($t) => $t->campaign_id || filled($t->utm_campaign));
+        if ($touch) {
+            return $touch->campaign?->name ?: $touch->utm_campaign;
+        }
+
+        $external = $this->extra['meta_campaign_id'] ?? null;
+
+        return $external ? Campaign::where('external_id', $external)->value('name') : null;
+    }
+
+    /** The ad itself, when the intake path recorded one. */
+    public function adLabel(): ?string
+    {
+        return $this->ad?->name ?: (filled($this->utm_content) ? $this->utm_content : null);
+    }
+
     // Scopes
     public function scopeForUser($query, User $user)
     {

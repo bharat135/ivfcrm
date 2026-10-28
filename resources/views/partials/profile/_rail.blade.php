@@ -10,6 +10,9 @@
 
     $channel = $lead?->channel ?: 'manual';
     $clickId = $lead?->clickIdentifier();
+    $campaignName = $lead?->campaignLabel();
+    $adName       = $lead?->adLabel();
+    $formName     = $lead?->extra['form_name'] ?? null;
     $centre  = $patient->center;
 
     // A deterministic colour per centre, so the mark reads as an identity
@@ -55,7 +58,11 @@
 
 <div class="rail-row">
     <span class="rail-label"><i class="bi bi-hash"></i>Patient ID</span>
-    <span class="rail-value">{{ $patient->patient_code }}</span>
+    @if($patient->patient_code)
+        <span class="rail-value">{{ $patient->patient_code }}</span>
+    @else
+        <span class="rail-value text-muted" title="The patient ID is issued when the first visit is marked">After first visit</span>
+    @endif
 </div>
 
 <div class="rail-row">
@@ -204,10 +211,22 @@
     </span>
 </div>
 
-@if($lead?->campaign)
+<div class="rail-row">
+    <span class="rail-label"><i class="bi bi-bullseye"></i>Campaign</span>
+    <span class="rail-value text-truncate" title="{{ $campaignName }}">{{ $campaignName ?: '—' }}</span>
+</div>
+
+@if($adName)
     <div class="rail-row">
-        <span class="rail-label"><i class="bi bi-bullseye"></i>Campaign</span>
-        <span class="rail-value" title="{{ $lead->campaign->name }}">{{ $lead->campaign->name }}</span>
+        <span class="rail-label"><i class="bi bi-badge-ad"></i>Ad</span>
+        <span class="rail-value text-truncate" title="{{ $adName }}">{{ $adName }}</span>
+    </div>
+@endif
+
+@if($formName)
+    <div class="rail-row">
+        <span class="rail-label"><i class="bi bi-ui-checks"></i>Lead form</span>
+        <span class="rail-value text-truncate" title="{{ $formName }}">{{ $formName }}</span>
     </div>
 @endif
 

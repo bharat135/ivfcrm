@@ -460,7 +460,8 @@ class InboxController extends Controller
                 'url'    => route('leads.show', $conversation->lead),
             ] : null;
 
-            $payload['patient'] = $conversation->patient ? [
+            // Only once the couple has visited; before that they are a lead.
+            $payload['patient'] = $conversation->patient?->isRegistered() ? [
                 'id'   => $conversation->patient->id,
                 'name' => $conversation->patient->name,
                 'code' => $conversation->patient->patient_code,

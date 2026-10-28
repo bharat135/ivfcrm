@@ -3,7 +3,11 @@
 @section('title', $patient->coupleName())
 
 @section('breadcrumb')
-    <li class="breadcrumb-item"><a href="{{ route('patients.index') }}">Patients</a></li>
+    @if($patient->isRegistered())
+        <li class="breadcrumb-item"><a href="{{ route('patients.index') }}">Patients</a></li>
+    @else
+        <li class="breadcrumb-item"><a href="{{ route('leads.index') }}">Enquiries</a></li>
+    @endif
     <li class="breadcrumb-item active">{{ $patient->coupleName() }}</li>
 @endsection
 

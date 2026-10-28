@@ -391,6 +391,11 @@ class MetaSyncService
             'meta_lead_id'  => $externalId,
             'form_id'       => $remote['form_id'] ?? $form?->external_id,
             'form_name'     => $form?->name,
+            // Kept even when the campaign is not mirrored yet, so the profile
+            // can still name it once the structure sync catches up.
+            'meta_campaign_id' => $remote['campaign_id'] ?? ($context['campaign_id'] ?? null),
+            'meta_adset_id'    => $remote['adset_id'] ?? ($context['adgroup_id'] ?? null),
+            'meta_ad_id'       => $remote['ad_id'] ?? ($context['ad_id'] ?? null),
             'platform'      => $remote['platform'] ?? 'facebook',
             'is_organic'    => $remote['is_organic'] ?? false,
             'raw_answers'   => $answers,

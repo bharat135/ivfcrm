@@ -113,6 +113,17 @@ class AppointmentController extends Controller
 
         $appointment->update($data);
 
+        // The first visit is what turns an enquiry into a patient with an ID.
+        if ($status === 'visited' && $appointment->wasChanged('status')) {
+            $appointment->loadMissing('lead', 'patient');
+            $subject = $appointment->patient ?: $appointment->lead;
+            $patient = $subject ? app(\App\Services\PatientLinker::class)->registerVisit($subject) : null;
+
+            if ($patient && ! $appointment->patient_id) {
+                $appointment->forceFill(['patient_id' => $patient->id])->saveQuietly();
+            }
+        }
+
         if ($appointment->wasChanged('scheduled_at')) {
             $this->logToLead($appointment, 'Appointment rescheduled');
         } elseif ($status && $appointment->wasChanged('status')) {
