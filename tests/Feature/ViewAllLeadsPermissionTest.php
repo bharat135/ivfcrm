@@ -50,4 +50,15 @@ class ViewAllLeadsPermissionTest extends TestCase
         $other = Lead::where(fn ($q) => $q->whereNull('assigned_to')->orWhere('assigned_to', '!=', $analyst->id))->first();
         $this->assertTrue($analyst->can('view', $other));
     }
+
+    public function test_with_the_permission_the_dashboard_counts_every_lead(): void
+    {
+        $analyst = $this->analyst();
+        $analyst->givePermissionTo('view_all_leads');
+        $analyst->refresh();
+
+        $metrics = app(\App\Services\DashboardService::class)->getMetrics($analyst);
+
+        $this->assertSame(Lead::count(), $metrics['totalLeads']);
+    }
 }

@@ -28,7 +28,7 @@ class DashboardService
                     $leadQuery->where('center_id', $centerId);
                     $followQuery->whereHas('lead', fn($q) => $q->where('center_id', $centerId));
                     $callQuery->where('center_id', $centerId);
-                } else {
+                } elseif (! $user->can('view_all_leads')) {
                     $leadQuery->where('assigned_to', $user->id);
                     $followQuery->where('user_id', $user->id);
                     $callQuery->where('user_id', $user->id);
