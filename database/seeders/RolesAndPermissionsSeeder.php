@@ -130,7 +130,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'appointments.view', 'appointments.create', 'appointments.view_own',
                 'conversations.view', 'conversations.create', 'conversations.edit',
                 'whatsapp_templates.view', 'whatsapp_flows.view', 'whatsapp_flows.create',
-                'view_own_leads',
+                'view_all_leads',
                 'reports.view', 'telephony.view',
             ],
             'Receptionist' => [

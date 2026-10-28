@@ -105,6 +105,9 @@ class Lead extends Model
         if ($user->hasRole('Center Manager')) {
             return $query->where('center_id', $user->center_id);
         }
+        if ($user->can('view_all_leads')) {
+            return $query;
+        }
         return $query->where('assigned_to', $user->id);
     }
 

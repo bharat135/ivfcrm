@@ -20,6 +20,9 @@ class LeadPolicy
         if ($user->hasRole('Center Manager') && $lead->center_id === $user->center_id) {
             return true;
         }
+        if (! $user->hasRole('Center Manager') && $user->can('view_all_leads')) {
+            return true;
+        }
         return $lead->assigned_to === $user->id;
     }
 
