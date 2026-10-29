@@ -24,6 +24,7 @@
                             <th>Center</th>
                             <th>Role</th>
                             <th>Status</th>
+                            <th>Smartflo</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -124,6 +125,38 @@
         </form>
     </div>
 </div>
+
+{{-- Smartflo extension: link, switch or unlink --}}
+<div class="modal fade" id="smartfloModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">Smartflo extension &middot; <span id="smartfloUserName"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">Extension / agent</label>
+                <select class="form-select" id="smartfloAgent">
+                    <option value="">— choose a Smartflo agent —</option>
+                    @foreach($tataAgents as $a)
+                        <option value="{{ $a->id }}">
+                            {{ $a->name }} · {{ $a->extension ?: $a->agent_id ?: $a->follow_me_number }}{{ $a->user ? ' (now: ' . $a->user->name . ')' : '' }}
+                        </option>
+                    @endforeach
+                </select>
+                <div class="form-text">Picking an agent already linked to someone else moves it to this user.</div>
+                <div class="small text-muted mt-2 d-none" id="smartfloManual"></div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <button type="button" class="btn btn-outline-danger btn-sm" id="smartfloUnlink"><i class="bi bi-x-circle"></i> Unlink</button>
+                <div>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="smartfloSave">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -139,6 +172,7 @@ $(function () {
             { data: 'center.name', defaultContent: '—' },
             { data: 'roles_list', orderable: false },
             { data: 'status_badge', orderable: false },
+            { data: 'smartflo', orderable: false, searchable: false },
             { data: 'action', orderable: false, searchable: false },
         ]
     });
@@ -215,6 +249,39 @@ $(function () {
                     });
                 }
             });
+    });
+
+    // Smartflo extension
+    const smartfloModal = new bootstrap.Modal('#smartfloModal');
+    let smartfloUser = null;
+
+    $(document).on('click', '.btn-smartflo-user', function () {
+        const b = $(this);
+        smartfloUser = b.data('id');
+        $('#smartfloUserName').text(b.data('name'));
+        $('#smartfloAgent').val(b.data('agent') || '');
+        const number = b.data('number');
+        $('#smartfloManual').toggleClass('d-none', !number || !!b.data('agent'))
+            .text(number ? `Currently rung on ${number} (typed by hand, not a synced agent).` : '');
+        smartfloModal.show();
+    });
+
+    function saveSmartflo(agentId) {
+        $.post(`/settings/users/${smartfloUser}/smartflo`, { _token: '{{ csrf_token() }}', agent_id: agentId })
+            .done(res => { toastr.success(res.message); smartfloModal.hide(); table.ajax.reload(null, false); })
+            .fail(xhr => toastr.error(xhr.responseJSON?.message ?? 'Error.'));
+    }
+
+    $('#smartfloSave').on('click', function () {
+        const agentId = $('#smartfloAgent').val();
+        if (!agentId) { toastr.warning('Choose a Smartflo agent, or use Unlink.'); return; }
+        saveSmartflo(agentId);
+    });
+
+    $('#smartfloUnlink').on('click', function () {
+        Swal.fire({ title: 'Unlink Smartflo extension?', text: 'This user will no longer be rung for calls.', icon: 'warning',
+                    showCancelButton: true, confirmButtonText: 'Unlink', confirmButtonColor: '#dc3545' })
+            .then(r => { if (r.isConfirmed) saveSmartflo(''); });
     });
 
     // Toggle status

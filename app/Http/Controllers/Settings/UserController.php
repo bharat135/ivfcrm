@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\Center;
 use App\Models\Doctor;
+use App\Models\TataAgent;
 use App\Models\User;
+use App\Services\Telephony\Tata\TataSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -19,7 +21,7 @@ class UserController extends Controller
         $this->authorize('viewAny', User::class);
 
         if ($request->ajax() || $request->wantsJson()) {
-            $query = User::with(['roles:id,name', 'center:id,name'])
+            $query = User::with(['roles:id,name', 'center:id,name', 'tataAgent'])
                 ->select('users.*');
 
             return DataTables::of($query)
@@ -33,15 +35,18 @@ class UserController extends Controller
                         ? "<span class='badge bg-success'>Active</span>"
                         : "<span class='badge bg-secondary'>Inactive</span>"
                 )
+                ->addColumn('smartflo', fn($u) => view('settings.users._smartflo', ['user' => $u])->render())
                 ->addColumn('action', fn($u) => view('settings.users._actions', ['user' => $u])->render())
-                ->rawColumns(['roles_list', 'status_badge', 'action'])
+                ->rawColumns(['roles_list', 'status_badge', 'smartflo', 'action'])
                 ->make(true);
         }
 
         $roles   = Role::orderBy('name')->get();
         $centers = Center::active()->get();
 
-        return view('settings.users.index', compact('roles', 'centers'));
+        $tataAgents = TataAgent::with('user:id,name')->orderBy('name')->get();
+
+        return view('settings.users.index', compact('roles', 'centers', 'tataAgents'));
     }
 
     public function store(Request $request)
@@ -158,6 +163,31 @@ class UserController extends Controller
         $user->delete();
 
         return response()->json(['success' => true, 'message' => 'User deleted.']);
+    }
+
+    /**
+     * Link the user to a Smartflo agent (extension), switch them to another
+     * one, or unlink them so they are no longer rung for calls.
+     */
+    public function smartflo(Request $request, User $user, TataSyncService $sync)
+    {
+        $this->authorize('update', $user);
+
+        $data = $request->validate(['agent_id' => ['nullable', 'exists:tata_agents,id']]);
+
+        if (! empty($data['agent_id'])) {
+            $agent = $sync->linkAgent(TataAgent::findOrFail($data['agent_id']), $user);
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$user->name} is now linked to " . ($agent->extension ?: $agent->agent_id ?: $agent->name) . '.',
+            ]);
+        }
+
+        TataAgent::where('user_id', $user->id)->get()->each(fn (TataAgent $agent) => $sync->unlinkAgent($agent));
+        $user->forceFill(['tata_agent_number' => null])->save();
+
+        return response()->json(['success' => true, 'message' => "Smartflo extension unlinked from {$user->name}."]);
     }
 
     public function toggleStatus(User $user)

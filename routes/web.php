@@ -148,6 +148,7 @@ Route::middleware(['auth', 'single.device'])->group(function () {
             Route::put('/{user}', [SettingsUserController::class, 'update'])->middleware('can:users.edit')->name('update');
             Route::delete('/{user}', [SettingsUserController::class, 'destroy'])->middleware('can:users.delete')->name('destroy');
             Route::patch('/{user}/toggle-status', [SettingsUserController::class, 'toggleStatus'])->middleware('can:users.edit')->name('toggle_status');
+            Route::post('/{user}/smartflo', [SettingsUserController::class, 'smartflo'])->middleware('can:users.edit')->name('smartflo');
         });
 
         // Roles

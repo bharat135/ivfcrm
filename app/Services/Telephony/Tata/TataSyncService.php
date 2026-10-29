@@ -311,6 +311,12 @@ class TataSyncService
     {
         TataAgent::where('user_id', $user->id)->where('id', '!=', $agent->id)->update(['user_id' => null, 'sync_status' => 'unlinked']);
 
+        // Moving the agent off another user: that user stops being rung on it,
+        // and the number is unique per user so it has to be released first.
+        if ($agent->user_id && $agent->user_id !== $user->id) {
+            User::whereKey($agent->user_id)->update(['tata_agent_number' => null]);
+        }
+
         $agent->forceFill(['user_id' => $user->id, 'sync_status' => 'linked', 'last_error' => null])->save();
         $this->applyToUser($agent);
 
