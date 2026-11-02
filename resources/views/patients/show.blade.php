@@ -556,6 +556,7 @@ $('#updateFilters').on('click', 'button', function () {
 function filterTasks() {
     const type = $('#taskTypeFilter').val();
     const term = ($('#taskSearch').val() || '').toLowerCase();
+    const importantOnly = $('#taskImportantFilter').is(':checked');
 
     $('.task-group').each(function () {
         const group = $(this);
@@ -564,6 +565,7 @@ function filterTasks() {
         group.find('.task-row').each(function () {
             const row = $(this);
             const matches = (!type || row.data('type') === type)
+                && (!importantOnly || String(row.data('important')) === '1')
                 && (!term || String(row.data('title')).includes(term));
 
             row.toggleClass('d-none', !matches);
@@ -576,7 +578,7 @@ function filterTasks() {
     });
 }
 
-$('#taskTypeFilter, #taskSearch').on('change keyup', filterTasks);
+$('#taskTypeFilter, #taskSearch, #taskImportantFilter').on('change keyup', filterTasks);
 
 function completeFollowUp(id, row) {
     $.post(`/followups/${id}/complete`)

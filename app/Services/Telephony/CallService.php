@@ -873,6 +873,7 @@ class CallService
                 $data['sub_disposition_id'] ?? null,
                 $data['remark'] ?? '',
                 $data['next_follow_up_at'] ?? null,
+                filter_var($data['important'] ?? false, FILTER_VALIDATE_BOOLEAN),
             );
         }
 

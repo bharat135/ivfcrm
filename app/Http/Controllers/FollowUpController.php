@@ -29,6 +29,25 @@ class FollowUpController extends Controller
                 $query->where('status', 'pending')->where('scheduled_at', '<', now());
             }
 
+            // Filter bar: type, disposition, date range and the important flag.
+            if ($type = $request->get('type')) {
+                $query->where('type', $type);
+            }
+            if ($dispositionId = $request->get('disposition_id')) {
+                $query->where('disposition_id', $dispositionId);
+            }
+            if ($from = $request->get('from')) {
+                $query->whereDate('scheduled_at', '>=', $from);
+            }
+            if ($to = $request->get('to')) {
+                $query->whereDate('scheduled_at', '<=', $to);
+            }
+            if ($request->get('important') === '1') {
+                $query->where('is_important', true);
+            } elseif ($request->get('important') === '0') {
+                $query->where('is_important', false);
+            }
+
             return DataTables::of($query)
                 ->addColumn('lead_mobile', fn ($f) => \App\Support\PhoneNumber::display($f->lead?->mobile))
                 ->addColumn('cover', fn ($f) => $f->delegated_to
@@ -39,10 +58,13 @@ class FollowUpController extends Controller
                 ->make(true);
         }
 
-        $todayCount   = FollowUp::forAgent(Auth::id())->whereDate('scheduled_at', today())->count();
-        $overdueCount = FollowUp::forAgent(Auth::id())->where('status', 'pending')->where('scheduled_at', '<', now())->count();
+        $todayCount     = FollowUp::forAgent(Auth::id())->whereDate('scheduled_at', today())->count();
+        $overdueCount   = FollowUp::forAgent(Auth::id())->where('status', 'pending')->where('scheduled_at', '<', now())->count();
+        $importantCount = FollowUp::forAgent(Auth::id())->pending()->important()->count();
 
-        return view('followups.index', compact('todayCount', 'overdueCount'));
+        $dispositions = \App\Models\Disposition::active()->primary()->orderBy('sort_order')->get(['id', 'name']);
+
+        return view('followups.index', compact('todayCount', 'overdueCount', 'importantCount', 'dispositions'));
     }
 
     public function store(Request $request)
@@ -53,10 +75,12 @@ class FollowUpController extends Controller
             'scheduled_at'   => ['required', 'date', new \App\Rules\WithinCallHours()],
             'remark'         => ['nullable', 'string'],
             'disposition_id' => ['nullable', 'exists:dispositions,id'],
+            'is_important'   => ['nullable', 'boolean'],
         ]);
 
-        $data['user_id'] = Auth::id();
-        $data['status']  = 'pending';
+        $data['user_id']      = Auth::id();
+        $data['status']       = 'pending';
+        $data['is_important'] = $request->boolean('is_important');
 
         $followUp = FollowUp::create($data);
 
@@ -66,7 +90,7 @@ class FollowUpController extends Controller
             'lead_id'     => $followUp->lead_id,
             'user_id'     => Auth::id(),
             'type'        => 'followup',
-            'title'       => ucfirst($data['type']) . ' follow-up scheduled',
+            'title'       => ucfirst($data['type']) . ' follow-up scheduled' . ($data['is_important'] ? ' (important)' : ''),
             'description' => 'For ' . \Illuminate\Support\Carbon::parse($data['scheduled_at'])->format('d-m-Y h:i A') . ($data['remark'] ?? null ? ' — ' . $data['remark'] : ''),
             'properties'  => ['follow_up_id' => $followUp->id],
         ]);

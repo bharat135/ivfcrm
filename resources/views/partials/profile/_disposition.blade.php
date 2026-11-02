@@ -33,6 +33,13 @@
                 <div class="col-md-6">
                     <label class="form-label small fw-semibold" for="nextFollowUp">Next follow-up <span class="fw-normal text-muted">date &amp; time</span> <span class="text-danger" id="followUpRequired">*</span></label>
                     <input type="text" name="next_follow_up_at" id="nextFollowUp" class="form-control form-control-sm" placeholder="Pick date and time">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="important" value="1" id="importantFollowUp">
+                        <label class="form-check-label small" for="importantFollowUp">
+                            <i class="bi bi-star-fill text-warning"></i> Important follow-up
+                            <span class="text-muted">· must not slip</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label small fw-semibold d-flex justify-content-between align-items-center" for="remark">

@@ -132,6 +132,7 @@ class LeadApiController extends Controller
             'sub_disposition_id' => ['nullable', 'exists:dispositions,id'],
             'remark'             => ['required', 'string'],
             'next_follow_up_at'  => ['nullable', 'date'],
+            'important'          => ['nullable', 'boolean'],
         ]);
 
         $this->service->updateDisposition(
@@ -140,6 +141,7 @@ class LeadApiController extends Controller
             $data['sub_disposition_id'] ?? null,
             $data['remark'],
             $data['next_follow_up_at'] ?? null,
+            (bool) ($data['important'] ?? false),
         );
 
         return response()->json(['success' => true, 'data' => $this->payload($lead->fresh())]);

@@ -31,6 +31,12 @@
             @endforeach
         </select>
     </label>
+    <div class="form-check form-check-inline m-0">
+        <input class="form-check-input" type="checkbox" id="taskImportantFilter">
+        <label class="form-check-label small" for="taskImportantFilter">
+            <i class="bi bi-star-fill text-warning"></i> Important only
+        </label>
+    </div>
 
     <div class="d-flex align-items-center gap-2">
         <div class="input-group input-group-sm" style="width:220px">
@@ -83,6 +89,7 @@
             @endphp
             <div class="task-row {{ $task->status === 'done' ? 'is-done' : '' }}"
                  data-type="{{ $task->type }}"
+                 data-important="{{ $task->is_important ? '1' : '0' }}"
                  data-title="{{ Str::lower($task->remark ?: $task->type) }}">
 
                 @can('followups.edit')
@@ -96,6 +103,9 @@
                 @endcan
 
                 <span class="task-title text-truncate">
+                    @if($task->is_important)
+                        <i class="bi bi-star-fill text-warning me-1" title="Important follow-up"></i>
+                    @endif
                     {{ $task->remark ?: ucfirst($task->type) . ' follow-up' }}
                 </span>
 
@@ -190,10 +200,16 @@
                         <input type="text" name="scheduled_at" class="form-control form-control-sm flatpickr-dt"
                                placeholder="Pick a date and time" required>
                     </div>
-                    <div class="mb-0">
+                    <div class="mb-3">
                         <label class="form-label small fw-semibold">Note</label>
                         <textarea name="remark" class="form-control form-control-sm" rows="2"
                                   placeholder="What is this follow-up for?"></textarea>
+                    </div>
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" name="is_important" value="1" id="newFollowUpImportant">
+                        <label class="form-check-label small" for="newFollowUpImportant">
+                            <i class="bi bi-star-fill text-warning"></i> Important follow-up
+                        </label>
                     </div>
                 </div>
                 <div class="modal-footer">

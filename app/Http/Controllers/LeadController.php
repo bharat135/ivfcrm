@@ -469,6 +469,7 @@ class LeadController extends Controller
                 \Illuminate\Validation\Rule::requiredIf(fn () => ! Disposition::whereKey($request->disposition_id)->value('is_lost')),
                 'nullable', 'date', 'after:now', new \App\Rules\WithinCallHours(),
             ],
+            'important'          => ['nullable', 'boolean'],
         ], [
             'next_follow_up_at.required'  => 'Pick when to call back: a follow-up time is needed for every disposition except the ones that stop calling.',
             'sub_disposition_id.required' => 'Pick the reason for stopping calls.',
@@ -480,6 +481,7 @@ class LeadController extends Controller
             $request->sub_disposition_id,
             $request->remark,
             $request->next_follow_up_at,
+            $request->boolean('important'),
         );
 
         // "Log a call" from the profile is how an agent dispositions the call

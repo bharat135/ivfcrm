@@ -430,6 +430,7 @@ class CallController extends Controller
             'sub_disposition_id' => ['nullable', 'exists:dispositions,id'],
             'remark'             => ['nullable', 'string', 'max:2000'],
             'next_follow_up_at'  => ['nullable', 'date', 'after:now'],
+            'important'          => ['nullable', 'boolean'],
         ]);
 
         $call = $this->calls->disposition($call, $data);

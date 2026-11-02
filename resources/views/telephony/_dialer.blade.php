@@ -93,6 +93,12 @@
                     <div class="mb-0">
                         <label class="form-label">Schedule next follow-up</label>
                         <input type="datetime-local" name="next_follow_up_at" class="form-control">
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" name="important" value="1" id="dispImportant">
+                            <label class="form-check-label" for="dispImportant">
+                                <i class="bi bi-star-fill text-warning"></i> Important follow-up
+                            </label>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">

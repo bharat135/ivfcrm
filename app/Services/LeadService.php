@@ -69,9 +69,13 @@ class LeadService
         });
     }
 
-    public function updateDisposition(Lead $lead, int $dispositionId, ?int $subDispositionId, string $remark, ?string $nextFollowUpAt = null): Lead
+    /**
+     * @param bool $important Flag the follow-up booked here as important, so it
+     *                        stands out and can be filtered on the Follow-Ups page.
+     */
+    public function updateDisposition(Lead $lead, int $dispositionId, ?int $subDispositionId, string $remark, ?string $nextFollowUpAt = null, bool $important = false): Lead
     {
-        return DB::transaction(function () use ($lead, $dispositionId, $subDispositionId, $remark, $nextFollowUpAt) {
+        return DB::transaction(function () use ($lead, $dispositionId, $subDispositionId, $remark, $nextFollowUpAt, $important) {
             $disposition = \App\Models\Disposition::findOrFail($dispositionId);
 
             $updates = [
@@ -101,6 +105,7 @@ class LeadService
                     'type'           => 'call',
                     'scheduled_at'   => $nextFollowUpAt,
                     'status'         => 'pending',
+                    'is_important'   => $important,
                 ]);
             }
 
@@ -112,7 +117,7 @@ class LeadService
 
             $subName = $subDispositionId ? \App\Models\Disposition::whereKey($subDispositionId)->value('name') : null;
             $followUpNote = $nextFollowUpAt
-                ? ' · Next follow-up ' . \Carbon\Carbon::parse($nextFollowUpAt)->format('d-m-Y h:i A')
+                ? ' · Next follow-up ' . \Carbon\Carbon::parse($nextFollowUpAt)->format('d-m-Y h:i A') . ($important ? ' (important)' : '')
                 : '';
 
             $this->logActivity($lead, 'status', 'Disposition added',
