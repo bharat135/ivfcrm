@@ -7,15 +7,24 @@ use App\Models\CallLog;
 use App\Models\FollowUp;
 use App\Models\Lead;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 
 class DashboardService
 {
-    public function getMetrics(User $user): array
+    /**
+     * Headline figures. The period-bound ones (leads, calls, follow-ups due,
+     * appointments, conversions) cover $from..$to, today by default; active
+     * leads, overdue follow-ups and the lead total are always "right now".
+     */
+    public function getMetrics(User $user, ?Carbon $from = null, ?Carbon $to = null): array
     {
-        $cacheKey = "dashboard_metrics_{$user->id}";
+        $from = ($from ?? today())->copy()->startOfDay();
+        $to   = ($to ?? $from)->copy()->endOfDay();
 
-        return Cache::remember($cacheKey, 120, function () use ($user) {
+        $cacheKey = "dashboard_metrics_{$user->id}_{$from->toDateString()}_{$to->toDateString()}";
+
+        return Cache::remember($cacheKey, 120, function () use ($user, $from, $to) {
             $isAdmin = $user->hasRole(['Super Admin', 'Management', 'Marketing Head']);
             $centerId = $user->center_id;
 
@@ -35,17 +44,17 @@ class DashboardService
                 }
             }
 
-            $todayLeads   = (clone $leadQuery)->whereDate('created_at', today())->count();
+            $todayLeads   = (clone $leadQuery)->whereBetween('created_at', [$from, $to])->count();
             $totalLeads   = (clone $leadQuery)->count();
             $activeLeads  = (clone $leadQuery)->whereNotIn('status', ['won', 'lost', 'junk'])->count();
-            $todayCalls   = (clone $callQuery)->whereDate('created_at', today())->count();
-            $todayFollows = (clone $followQuery)->whereDate('scheduled_at', today())->count();
+            $todayCalls   = (clone $callQuery)->whereBetween('created_at', [$from, $to])->count();
+            $todayFollows = (clone $followQuery)->whereBetween('scheduled_at', [$from, $to])->count();
             $overdueFollows = (clone $followQuery)->where('status', 'pending')->where('scheduled_at', '<', now())->count();
 
-            $todayAppointments = Appointment::query()->when(!$isAdmin, fn($q) => $q->visibleTo($user))->whereDate('scheduled_at', today())->count();
+            $todayAppointments = Appointment::query()->when(!$isAdmin, fn($q) => $q->visibleTo($user))->whereBetween('scheduled_at', [$from, $to])->count();
 
             $monthlyConversions = (clone $leadQuery)
-                ->whereMonth('created_at', now()->month)
+                ->whereBetween('created_at', [$from, $to])
                 ->where('status', 'won')
                 ->count();
 
@@ -55,6 +64,28 @@ class DashboardService
                 'todayAppointments', 'monthlyConversions'
             );
         });
+    }
+
+    /**
+     * The telecalling scorecard for the dashboard: supervisors see every
+     * agent, a centre manager their centre's agents, an agent only their own
+     * row. Null when the user has no row to show.
+     */
+    public function getTeamPerformance(User $user, Carbon $from, Carbon $to): ?array
+    {
+        $report = app(\App\Services\Reports\AgentPerformanceReport::class);
+
+        if ($user->hasRole(['Super Admin', 'Admin', 'Management', 'Marketing Head']) || $user->can('view_all_leads')) {
+            $agents = null;
+        } elseif ($user->hasRole('Center Manager') && $user->center_id) {
+            $agents = \App\Services\Reports\AgentPerformanceReport::agents()->where('center_id', $user->center_id)->values();
+        } elseif ($user->hasRole(\App\Services\Reports\AgentPerformanceReport::AGENT_ROLES)) {
+            $agents = collect([$user]);
+        } else {
+            return null;
+        }
+
+        return $report->build($from, $to, $agents);
     }
 
     public function getSourceChart(?int $centerId = null, int $days = 30): array

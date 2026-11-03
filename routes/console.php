@@ -77,6 +77,13 @@ Schedule::job(new \App\Jobs\ReassignIdleLeadsJob)->everyFiveMinutes()->name('rea
 // Leave cover: follow-ups due while their owner is away go to a present agent.
 Schedule::job(new \App\Jobs\DelegateLeaveFollowUpsJob)->everyFifteenMinutes()->name('delegate-leave-followups')->withoutOverlapping();
 
+// Management's daily telecalling scorecard (dials, connects, appointments,
+// visits per centre, FTD/MTD) goes out every evening.
+Schedule::command('reports:daily-telecalling')
+    ->dailyAt(config('reports.daily.send_at', '20:30'))
+    ->name('daily-telecalling-report')
+    ->withoutOverlapping();
+
 // Keep the Tata Smartflo access token fresh so panel calls never hit an expired
 // token. Runs often; the command itself only re-mints when near expiry.
 Schedule::command('tata:refresh-token')->everyThirtyMinutes()->withoutOverlapping();

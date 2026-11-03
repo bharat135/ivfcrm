@@ -18,7 +18,7 @@
                     <select class="form-select form-select-sm" id="disposition" name="disposition_id" required>
                         <option value="">Select</option>
                         @foreach($dispositions as $disposition)
-                            <option value="{{ $disposition->id }}" data-stop-call="{{ $disposition->is_lost ? '1' : '0' }}">
+                            <option value="{{ $disposition->id }}" data-stop-call="{{ $disposition->is_lost ? '1' : '0' }}" data-visit="{{ $disposition->isVisitOutcome() ? '1' : '0' }}">
                                 {{ $disposition->name }}
                             </option>
                         @endforeach
@@ -30,7 +30,7 @@
                         <option value="">Select</option>
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6" id="followUpWrap">
                     <label class="form-label small fw-semibold" for="nextFollowUp">Next follow-up <span class="fw-normal text-muted">date &amp; time</span> <span class="text-danger" id="followUpRequired">*</span></label>
                     <input type="text" name="next_follow_up_at" id="nextFollowUp" class="form-control form-control-sm" placeholder="Pick date and time">
                     <div class="form-check mt-2">
@@ -90,11 +90,15 @@ function refreshDisposition() {
         .append(children.map(c => `<option value="${c.id}">${c.name}</option>`).join(''))
         .prop('disabled', children.length === 0);
 
-    // Every outcome needs a callback time, except the ones that stop calling;
-    // those take the reason instead.
+    // Every outcome needs a callback time, except the ones that stop calling
+    // (those take the reason instead) and the visit outcomes, where the
+    // patient has already come in: the field is hidden and cleared.
     const stopsCalling = String(option.data('stop-call')) === '1';
-    $('#followUpRequired').toggleClass('d-none', stopsCalling);
-    $('#nextFollowUp').prop('required', !stopsCalling);
+    const visited      = String(option.data('visit')) === '1';
+    $('#followUpWrap').toggleClass('d-none', visited);
+    if (visited) { followUpPicker.clear(); $('#importantFollowUp').prop('checked', false); }
+    $('#followUpRequired').toggleClass('d-none', stopsCalling || visited);
+    $('#nextFollowUp').prop('required', !stopsCalling && !visited);
 
     const needsReason = stopsCalling && children.length > 0;
     $('#subDisposition').prop('required', needsReason);

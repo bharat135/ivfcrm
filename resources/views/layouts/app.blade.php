@@ -175,8 +175,19 @@
         <div class="nav-label">Clinical</div>
         @endcanany
         @can('appointments.view')
-        <a href="{{ route('appointments.index') }}" class="nav-link {{ request()->routeIs('appointments.*') ? 'active' : '' }}">
+        <a href="{{ route('appointments.index') }}" class="nav-link {{ request()->routeIs('appointments.*') ? 'active' : '' }}"
+           title="Appointments scheduled from today">
             <i class="bi bi-calendar-check"></i> <span>Appointments</span>
+            @php
+                // Scheduled and still to happen. Appointment::scopeVisibleTo
+                // keeps this to a telecaller's own bookings and gives
+                // supervisors everyone's.
+                $scheduledAppointments = \App\Models\Appointment::visibleTo(auth()->user())
+                    ->whereIn('status', ['booked', 'confirmed'])
+                    ->where('scheduled_at', '>=', today())
+                    ->count();
+            @endphp
+            @if($scheduledAppointments > 0)<span class="badge-count" id="navScheduledAppointments">{{ $scheduledAppointments }}</span>@endif
         </a>
         @endcan
         @can('patients.view')

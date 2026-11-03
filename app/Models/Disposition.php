@@ -41,6 +41,29 @@ class Disposition extends Model
         return $query->where('is_active', true);
     }
 
+    /**
+     * "Visit done" and "Already visit done": the patient has been to the
+     * clinic, so there is no next calling time to pick. Matched by the stage
+     * the disposition moves the lead to (consultation visited) or its slug,
+     * since the live list is edited under Settings.
+     */
+    public function isVisitOutcome(): bool
+    {
+        static $visitStageId = false;
+        if ($visitStageId === false) {
+            $visitStageId = PipelineStage::where('slug', 'consultation-visited')->value('id');
+        }
+
+        return in_array($this->slug, ['visit-done', 'already-visit-done', 'appointment-visited'], true)
+            || ($visitStageId && (int) $this->moves_to_stage_id === (int) $visitStageId);
+    }
+
+    /** Whether saving this outcome needs a next follow-up time. */
+    public function needsFollowUpTime(): bool
+    {
+        return ! $this->is_lost && ! $this->isVisitOutcome();
+    }
+
     public function scopePrimary($query)
     {
         return $query->whereNull('parent_id');

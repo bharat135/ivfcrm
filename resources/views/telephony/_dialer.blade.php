@@ -21,10 +21,11 @@
         ->whereNull('parent_id')
         ->where('is_active', true)
         ->orderBy('sort_order')
-        ->get(['id', 'name'])
+        ->get(['id', 'name', 'slug', 'moves_to_stage_id'])
         ->map(fn ($d) => [
             'id'       => $d->id,
             'name'     => $d->name,
+            'visit'    => $d->isVisitOutcome(),
             'children' => $d->children->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values(),
         ])
         ->values();
@@ -90,9 +91,9 @@
                              style="max-height:140px;overflow-y:auto;white-space:pre-wrap"></div>
                     </div>
 
-                    <div class="mb-0">
+                    <div class="mb-0" id="dispFollowUpWrap">
                         <label class="form-label">Schedule next follow-up</label>
-                        <input type="datetime-local" name="next_follow_up_at" class="form-control">
+                        <input type="datetime-local" name="next_follow_up_at" class="form-control" id="dispFollowUpAt">
                         <div class="form-check mt-2">
                             <input class="form-check-input" type="checkbox" name="important" value="1" id="dispImportant">
                             <label class="form-check-label" for="dispImportant">
@@ -482,6 +483,11 @@
         const children = parent?.children || [];
 
         $('#subDispWrap').toggleClass('d-none', children.length === 0);
+
+        // Visit outcomes have no next calling time: hide and clear it.
+        const visited = !!parent?.visit;
+        $('#dispFollowUpWrap').toggleClass('d-none', visited);
+        if (visited) { $('#dispFollowUpAt').val(''); $('#dispImportant').prop('checked', false); }
         $('#subDispSelect').html(
             '<option value="">—</option>' +
             children.map(c => `<option value="${c.id}">${$('<div>').text(c.name).html()}</option>`).join('')
@@ -494,6 +500,7 @@
         $('#dispDuration').text(call.duration + ' · ' + call.status);
         $('#callOutcomeForm')[0].reset();
         $('#subDispWrap').addClass('d-none');
+        $('#dispFollowUpWrap').removeClass('d-none');
         $('#dispRemark').val(''); updateRemarkCount();
         $('#dispTranscriptWrap').addClass('d-none');
         $('#dispTranscript').text(''); $('#dispRegen').addClass('d-none');

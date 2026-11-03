@@ -464,9 +464,10 @@ class LeadController extends Controller
                 'nullable', 'exists:dispositions,id',
             ],
             'remark'             => ['required', 'string', 'min:3'],
-            // Every outcome needs a callback time, except the ones that stop calling.
+            // Every outcome needs a callback time, except the ones that stop
+            // calling and the visit outcomes (the patient has already come in).
             'next_follow_up_at'  => [
-                \Illuminate\Validation\Rule::requiredIf(fn () => ! Disposition::whereKey($request->disposition_id)->value('is_lost')),
+                \Illuminate\Validation\Rule::requiredIf(fn () => Disposition::find($request->disposition_id)?->needsFollowUpTime() ?? false),
                 'nullable', 'date', 'after:now', new \App\Rules\WithinCallHours(),
             ],
             'important'          => ['nullable', 'boolean'],
