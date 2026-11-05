@@ -50,9 +50,34 @@ class CenterController extends Controller
             'is_active'=> ['boolean'],
         ]);
 
-        Center::create($data);
+        Center::create($this->withDefaults($data));
 
         return response()->json(['success' => true, 'message' => 'Center created.']);
+    }
+
+    /**
+     * Cities of a state, for the add/edit form's cascade.
+     */
+    public function cities(Request $request)
+    {
+        $request->validate(['state_id' => ['required', 'exists:states,id']]);
+
+        return response()->json(
+            City::where('state_id', $request->state_id)->orderBy('name')->get(['id', 'name'])
+        );
+    }
+
+    /**
+     * The form posts every field; blanks arrive as null, but the time zone
+     * column is NOT NULL (the clinic's zone by default), so an empty one
+     * falls back rather than failing the insert.
+     */
+    private function withDefaults(array $data): array
+    {
+        $data['timezone']  = $data['timezone'] ?? config('app.timezone', 'Asia/Kolkata');
+        $data['is_active'] = $data['is_active'] ?? true;
+
+        return $data;
     }
 
     public function edit(Center $center)
@@ -75,7 +100,7 @@ class CenterController extends Controller
             'is_active'=> ['boolean'],
         ]);
 
-        $center->update($data);
+        $center->update($this->withDefaults($data));
 
         return response()->json(['success' => true, 'message' => 'Center updated.']);
     }

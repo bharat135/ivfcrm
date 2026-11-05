@@ -175,6 +175,7 @@ Route::middleware(['auth', 'single.device'])->group(function () {
         Route::prefix('centers')->name('centers.')->middleware('can:centers.view')->group(function () {
             Route::get('/', [CenterController::class, 'index'])->name('index');
             Route::post('/', [CenterController::class, 'store'])->middleware('can:centers.create')->name('store');
+            Route::get('/cities', [CenterController::class, 'cities'])->name('cities');
             Route::get('/{center}/edit', [CenterController::class, 'edit'])->middleware('can:centers.edit')->name('edit');
             Route::put('/{center}', [CenterController::class, 'update'])->middleware('can:centers.edit')->name('update');
             Route::delete('/{center}', [CenterController::class, 'destroy'])->middleware('can:centers.delete')->name('destroy');

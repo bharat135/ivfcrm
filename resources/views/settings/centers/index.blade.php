@@ -138,7 +138,7 @@ $(function () {
         const stateId = $(this).val();
         $('#citySelect').html('<option value="">Loading…</option>');
         if (!stateId) { $('#citySelect').html('<option value="">— select state first —</option>'); return; }
-        $.get(`/api/cities?state_id=${stateId}`, function (cities) {
+        $.get('{{ route('settings.centers.cities') }}', { state_id: stateId }, function (cities) {
             let opts = '<option value="">— select city —</option>';
             cities.forEach(c => opts += `<option value="${c.id}">${c.name}</option>`);
             $('#citySelect').html(opts);
