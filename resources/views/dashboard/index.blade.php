@@ -45,7 +45,7 @@
                        class="btn {{ $active ? 'btn-secondary' : 'btn-outline-secondary' }}">{{ $label }}</a>
                 @endforeach
             </div>
-            <div class="input-group input-group-sm" style="width: 250px">
+            <div class="input-group input-group-sm" style="width: 320px">
                 <span class="input-group-text"><i class="bi bi-calendar-range me-1"></i>Period</span>
                 <input type="text" class="form-control" id="periodRange" aria-label="Date range">
             </div>
@@ -196,54 +196,54 @@
 <div class="row g-3 mb-4">
     <div class="col-lg-8">
         <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-transparent">
-                <h6 class="mb-0 fw-semibold">Conversion funnel</h6>
-                <div class="text-muted small">Each step is a share of the leads created in the period</div>
+            <div class="card-header bg-transparent an-head">
+                <div class="an-title">Conversion funnel</div>
+                <div class="an-sub">Each step is a share of the leads created in the period</div>
             </div>
-            <div class="card-body"><div id="chartFunnel" style="min-height:300px"></div><div class="d-flex flex-wrap gap-3 small text-muted mt-2" id="funnelRates"></div></div>
+            <div class="card-body"><div id="chartFunnel" style="min-height:300px"></div></div>
         </div>
     </div>
     <div class="col-lg-4">
         <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-transparent">
-                <h6 class="mb-0 fw-semibold">Leads by channel</h6>
-                <div class="text-muted small">Where the enquiries came from</div>
+            <div class="card-header bg-transparent an-head">
+                <div class="an-title">Leads by channel</div>
+                <div class="an-sub">Where the enquiries came from</div>
             </div>
             <div class="card-body"><div id="chartChannels" style="min-height:300px"></div></div>
         </div>
     </div>
     <div class="col-lg-8">
         <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-transparent">
-                <h6 class="mb-0 fw-semibold">Leads, bookings and visits by day</h6>
-                <div class="text-muted small">New leads each day, with the consultations booked and visited for them</div>
+            <div class="card-header bg-transparent an-head">
+                <div class="an-title">Leads, bookings and visits by day</div>
+                <div class="an-sub">New leads each day, with the consultations booked and visited for them</div>
             </div>
             <div class="card-body"><div id="chartTrend" style="min-height:300px"></div></div>
         </div>
     </div>
     <div class="col-lg-4">
         <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-transparent">
-                <h6 class="mb-0 fw-semibold">Pipeline stage</h6>
-                <div class="text-muted small">Where these leads stand today</div>
+            <div class="card-header bg-transparent an-head">
+                <div class="an-title">Pipeline stage</div>
+                <div class="an-sub">Where these leads stand today</div>
             </div>
             <div class="card-body"><div id="chartStages" style="min-height:300px"></div></div>
         </div>
     </div>
     <div class="col-lg-7">
         <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-transparent">
-                <h6 class="mb-0 fw-semibold">When leads arrive</h6>
-                <div class="text-muted small">Leads created by weekday and hour — darker is busier</div>
+            <div class="card-header bg-transparent an-head">
+                <div class="an-title">When leads arrive</div>
+                <div class="an-sub">Leads created by weekday and hour — darker is busier</div>
             </div>
             <div class="card-body" style="overflow-x:auto"><div id="chartHeat" style="min-height:300px;min-width:420px"></div></div>
         </div>
     </div>
     <div class="col-lg-5">
         <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-transparent">
-                <h6 class="mb-0 fw-semibold">Top lead sources</h6>
-                <div class="text-muted small">The source each enquiry was recorded under</div>
+            <div class="card-header bg-transparent an-head">
+                <div class="an-title">Top lead sources</div>
+                <div class="an-sub">The source each enquiry was recorded under</div>
             </div>
             <div class="card-body"><div id="chartSources" style="min-height:300px"></div></div>
         </div>
@@ -295,7 +295,7 @@ flatpickr('#periodRange', {
 $.get(@json(route('analytics.data')), { from: @json($from->toDateString()), to: @json($to->toDateString()) })
     .done(res => {
         const C = window.CrmCharts;
-        C.funnel('#chartFunnel', res.funnel, '#funnelRates');
+        C.funnel('#chartFunnel', res.funnel);
         C.donut('#chartChannels', res.channels, 'leads');
         C.trend('#chartTrend', res.trend);
         C.bars('#chartStages', res.stages, 'Leads', res.stages.map(s => s.color), 'No leads in this period.');

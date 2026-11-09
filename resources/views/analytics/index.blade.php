@@ -10,15 +10,8 @@
 
 @push('styles')
 <style>
-    .an-kpi .h4 { letter-spacing: -.02em; }
-    .an-kpi .rate { font-size: 12px; color: var(--bs-secondary-color); }
     .an-presets .btn { white-space: nowrap; }
     .an-heat-wrap { overflow-x: auto; }
-    .an-agents td, .an-agents th { white-space: nowrap; }
-    .an-agents .bar { height: 6px; border-radius: 3px; background: var(--bs-tertiary-bg); overflow: hidden; min-width: 90px; }
-    .an-agents .bar > i { display: block; height: 100%; background: #0d9488; border-radius: 3px; }
-    .an-avatar { width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
-    .an-empty { min-height: 180px; display: flex; align-items: center; justify-content: center; color: var(--bs-secondary-color); font-size: 13px; }
 </style>
 @endpush
 
@@ -45,7 +38,7 @@
                 <button type="button" class="btn btn-outline-secondary" data-from="{{ $pFrom->toDateString() }}" data-to="{{ $pTo->toDateString() }}">{{ $label }}</button>
             @endforeach
         </div>
-        <div class="input-group input-group-sm" style="width: 260px">
+        <div class="input-group input-group-sm" style="width: 330px">
             <span class="input-group-text" title="On the date the lead was created"><i class="bi bi-calendar-range me-1"></i>Lead created</span>
             <input type="text" class="form-control" id="anRange" aria-label="Date range">
         </div>
@@ -103,15 +96,13 @@
 <div class="row g-3 mb-3">
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-transparent d-flex justify-content-between align-items-start flex-wrap gap-2">
-                <div><div class="fw-semibold">Conversion funnel</div><div class="small text-muted">Each step is a share of the leads created in the range; the step rate is against the previous step.</div></div>
-            </div>
-            <div class="card-body"><div id="chartFunnel" style="min-height: 300px"></div><div class="d-flex flex-wrap gap-3 small text-muted mt-2" id="funnelRates"></div></div>
+            <div class="card-header bg-transparent an-head"><div class="an-title">Conversion funnel</div><div class="an-sub">Each step is a share of the leads created in the range; the step rate is against the previous step.</div></div>
+            <div class="card-body"><div id="chartFunnel" style="min-height: 300px"></div></div>
         </div>
     </div>
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-transparent"><div class="fw-semibold">Leads by channel</div><div class="small text-muted">Where the enquiries came from</div></div>
+            <div class="card-header bg-transparent an-head"><div class="an-title">Leads by channel</div><div class="an-sub">Where the enquiries came from</div></div>
             <div class="card-body"><div id="chartChannels" style="min-height: 300px"></div></div>
         </div>
     </div>
@@ -121,13 +112,13 @@
 <div class="row g-3 mb-3">
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-transparent"><div class="fw-semibold">Leads, bookings and visits by day</div><div class="small text-muted">New leads each day, with the consultations booked and visited for them</div></div>
+            <div class="card-header bg-transparent an-head"><div class="an-title">Leads, bookings and visits by day</div><div class="an-sub">New leads each day, with the consultations booked and visited for them</div></div>
             <div class="card-body"><div id="chartTrend" style="min-height: 300px"></div></div>
         </div>
     </div>
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-transparent"><div class="fw-semibold">Pipeline stage</div><div class="small text-muted">Where these leads stand today</div></div>
+            <div class="card-header bg-transparent an-head"><div class="an-title">Pipeline stage</div><div class="an-sub">Where these leads stand today</div></div>
             <div class="card-body"><div id="chartStages" style="min-height: 300px"></div></div>
         </div>
     </div>
@@ -138,20 +129,20 @@
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-transparent d-flex justify-content-between align-items-start flex-wrap gap-2">
-                <div><div class="fw-semibold">Top agents</div><div class="small text-muted">Ranked by consultations visited from the leads assigned to them in the range</div></div>
+                <div><div class="fw-semibold">Top agents</div><div class="an-sub">Ranked by consultations visited from the leads assigned to them in the range</div></div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="anAgentsCsv"><i class="bi bi-download me-1"></i>CSV</button>
             </div>
             <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle mb-0 small an-agents">
-                    <thead class="table-light"><tr><th>#</th><th>Agent</th><th class="text-end">Leads</th><th class="text-end">Contacted</th><th class="text-end">Dials</th><th class="text-end">Connected</th><th class="text-end">Booked</th><th class="text-end">Visited</th><th class="text-end">Won</th><th>Lead → visit</th></tr></thead>
-                    <tbody id="agentsBody"><tr><td colspan="10" class="text-center text-muted py-4">Loading…</td></tr></tbody>
+                    <thead class="table-light"><tr><th>#</th><th>Agent</th><th class="text-end">Leads</th><th class="text-end">Dials</th><th class="text-end">Connected</th><th class="text-end">Booked</th><th class="text-end">Visited</th><th class="text-end">Won</th><th>Lead → visit</th></tr></thead>
+                    <tbody id="agentsBody"><tr><td colspan="9" class="text-center text-muted py-4">Loading…</td></tr></tbody>
                 </table>
             </div>
         </div>
     </div>
     <div class="col-lg-5">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-transparent"><div class="fw-semibold">When leads arrive</div><div class="small text-muted">Leads created by weekday and hour — darker is busier</div></div>
+            <div class="card-header bg-transparent an-head"><div class="an-title">When leads arrive</div><div class="an-sub">Leads created by weekday and hour — darker is busier</div></div>
             <div class="card-body an-heat-wrap"><div id="chartHeat" style="min-height: 300px; min-width: 420px"></div></div>
         </div>
     </div>
@@ -161,13 +152,13 @@
 <div class="row g-3 mb-3">
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-transparent"><div class="fw-semibold">Centre comparison</div><div class="small text-muted">Leads, bookings, visits and conversions per centre</div></div>
+            <div class="card-header bg-transparent an-head"><div class="an-title">Centre comparison</div><div class="an-sub">Leads, bookings, visits and conversions per centre</div></div>
             <div class="card-body"><div id="chartCenters" style="min-height: 280px"></div></div>
         </div>
     </div>
     <div class="col-lg-5">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-transparent"><div class="fw-semibold">Top lead sources</div><div class="small text-muted">The configured source each enquiry was recorded under</div></div>
+            <div class="card-header bg-transparent an-head"><div class="an-title">Top lead sources</div><div class="an-sub">The configured source each enquiry was recorded under</div></div>
             <div class="card-body"><div id="chartSources" style="min-height: 280px"></div></div>
         </div>
     </div>
@@ -177,13 +168,13 @@
 <div class="row g-3 mb-3">
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-transparent"><div class="fw-semibold">Why leads are lost</div><div class="small text-muted">Reasons recorded with the stop-calling dispositions</div></div>
+            <div class="card-header bg-transparent an-head"><div class="an-title">Why leads are lost</div><div class="an-sub">Reasons recorded with the stop-calling dispositions</div></div>
             <div class="card-body"><div id="chartLost" style="min-height: 280px"></div></div>
         </div>
     </div>
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-transparent"><div class="fw-semibold">Call outcomes</div><div class="small text-muted">Dispositions saved on the calls made to these leads in the range</div></div>
+            <div class="card-header bg-transparent an-head"><div class="an-title">Call outcomes</div><div class="an-sub">Dispositions saved on the calls made to these leads in the range</div></div>
             <div class="card-body"><div id="chartCalls" style="min-height: 280px"></div></div>
         </div>
     </div>
@@ -247,7 +238,7 @@ $(function () {
         $.get(dataUrl, f).done(res => {
             lastData = res;
             C.kpis('#anKpis', res.kpis, res.range);
-            C.funnel('#chartFunnel', res.funnel, '#funnelRates');
+            C.funnel('#chartFunnel', res.funnel);
             C.donut('#chartChannels', res.channels, 'leads');
             C.trend('#chartTrend', res.trend);
             C.bars('#chartStages', res.stages, 'Leads', res.stages.map(s => s.color), 'No leads in this range.');
@@ -263,8 +254,8 @@ $(function () {
 
     $('#anAgentsCsv').on('click', function () {
         if (!lastData?.agents?.length) return toastr.info('Nothing to export.');
-        const head = ['Rank', 'Agent', 'Leads', 'Contacted', 'Dials', 'Connected', 'Booked', 'Visited', 'Won', 'Lead to visit %'];
-        const lines = [head].concat(lastData.agents.map(r => [r.rank, r.name, r.leads, r.contacted, r.dials, r.connected, r.booked, r.visited, r.won, r.visit_rate]));
+        const head = ['Rank', 'Agent', 'Leads', 'Dials', 'Connected', 'Booked', 'Visited', 'Won', 'Lead to visit %'];
+        const lines = [head].concat(lastData.agents.map(r => [r.rank, r.name, r.leads, r.dials, r.connected, r.booked, r.visited, r.won, r.visit_rate]));
         const csv = lines.map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));

@@ -73,7 +73,9 @@ class CrmAnalytics
             [$from, $to] = $this->range($filters);
 
             $totals   = $this->totals($user, $filters, $from, $to);
-            $days     = max($from->diffInDays($to), 0) + 1;
+            // Whole days: the range is start-of-day to end-of-day, so the
+            // difference is n days minus a second, which rounds up to n.
+            $days     = (int) round($from->diffInSeconds($to) / 86400);
             $previous = $this->totals(
                 $user, $filters,
                 $from->copy()->subDays($days)->startOfDay(),
@@ -194,21 +196,45 @@ class CrmAnalytics
         return $out;
     }
 
+    /**
+     * Older rows carry the raw provider name ("meta", "google", "walk-in")
+     * rather than the normalised channel, so those are folded into it here
+     * instead of each showing up as its own "Unknown" slice.
+     */
+    private const LEGACY_CHANNELS = [
+        'meta' => AcquisitionChannel::META_ADS, 'facebook' => AcquisitionChannel::META_ADS, 'fb' => AcquisitionChannel::META_ADS,
+        'google' => AcquisitionChannel::GOOGLE_ADS, 'adwords' => AcquisitionChannel::GOOGLE_ADS,
+        'walk-in' => AcquisitionChannel::WALK_IN, 'walkin' => AcquisitionChannel::WALK_IN, 'offline' => AcquisitionChannel::WALK_IN,
+        'website' => AcquisitionChannel::LANDING_PAGE, 'csv' => AcquisitionChannel::IMPORT,
+    ];
+
     private function channels(User $user, array $filters, Carbon $from, Carbon $to): array
     {
-        return $this->base($user, $filters, $from, $to)
+        $rows = $this->base($user, $filters, $from, $to)
             ->selectRaw('COALESCE(leads.channel, "manual") AS channel, COUNT(*) AS c')
             ->groupBy('channel')
-            ->orderByDesc('c')
-            ->get()
-            ->map(fn ($r) => [
-                'key'   => $r->channel,
-                'label' => AcquisitionChannel::label($r->channel),
-                'color' => AcquisitionChannel::color($r->channel),
-                'count' => (int) $r->c,
-            ])
-            ->values()
-            ->all();
+            ->get();
+
+        $counts = [];
+        foreach ($rows as $r) {
+            $key = strtolower(trim($r->channel));
+            $key = self::LEGACY_CHANNELS[$key] ?? $key;
+            $counts[$key] = ($counts[$key] ?? 0) + (int) $r->c;
+        }
+        arsort($counts);
+
+        $out = [];
+        foreach ($counts as $key => $count) {
+            $known = array_key_exists($key, AcquisitionChannel::options());
+            $out[] = [
+                'key'   => $key,
+                'label' => $known ? AcquisitionChannel::label($key) : ucfirst(str_replace(['_', '-'], ' ', $key)),
+                'color' => $known ? AcquisitionChannel::color($key) : '#94a3b8',
+                'count' => $count,
+            ];
+        }
+
+        return $out;
     }
 
     private function sources(User $user, array $filters, Carbon $from, Carbon $to): array
@@ -225,11 +251,16 @@ class CrmAnalytics
     }
 
     /**
-     * Day by day: leads created, and the consultations booked and visited
-     * for those leads (by booking date and by visit date).
+     * Over time: leads created, and the consultations booked and visited for
+     * those leads (by booking date and by visit date). Bucketed by day for up
+     * to two months, by week up to about a year, by month beyond that, so a
+     * long range reads as a trend rather than a comb of daily spikes.
      */
     private function trend(User $user, array $filters, Carbon $from, Carbon $to): array
     {
+        $days = (int) round($from->diffInSeconds($to) / 86400);
+        $unit = $days <= 62 ? 'day' : ($days <= 400 ? 'week' : 'month');
+
         $leads = $this->base($user, $filters, $from, $to)
             ->selectRaw('DATE(leads.created_at) AS d, COUNT(*) AS c')
             ->groupBy('d')
@@ -253,18 +284,40 @@ class CrmAnalytics
             ->groupBy('d')
             ->pluck('c', 'd');
 
+        // The bucket a day falls in, and the label that bucket shows.
+        $bucket = fn (Carbon $d) => match ($unit) {
+            'day'   => $d->toDateString(),
+            'week'  => $d->copy()->startOfWeek()->toDateString(),
+            default => $d->format('Y-m'),
+        };
+        $label = fn (Carbon $d) => match ($unit) {
+            'day'   => $d->format('d M'),
+            'week'  => $d->copy()->startOfWeek()->format('d M'),
+            default => $d->format('M Y'),
+        };
+
         $labels = [];
         $series = ['leads' => [], 'booked' => [], 'visited' => []];
+        $index  = [];
 
         for ($date = $from->copy(); $date->lte($to); $date->addDay()) {
-            $key = $date->toDateString();
-            $labels[] = $date->format('d M');
-            $series['leads'][]   = (int) ($leads[$key] ?? 0);
-            $series['booked'][]  = (int) ($booked[$key] ?? 0);
-            $series['visited'][] = (int) ($visited[$key] ?? 0);
+            $key = $bucket($date);
+            if (! isset($index[$key])) {
+                $index[$key] = count($labels);
+                $labels[] = $label($date);
+                foreach ($series as &$s) {
+                    $s[] = 0;
+                }
+                unset($s);
+            }
+            $i   = $index[$key];
+            $day = $date->toDateString();
+            $series['leads'][$i]   += (int) ($leads[$day] ?? 0);
+            $series['booked'][$i]  += (int) ($booked[$day] ?? 0);
+            $series['visited'][$i] += (int) ($visited[$day] ?? 0);
         }
 
-        return ['labels' => $labels, 'series' => $series];
+        return ['unit' => $unit, 'labels' => $labels, 'series' => $series];
     }
 
     private function stages(User $user, array $filters, Carbon $from, Carbon $to): array
