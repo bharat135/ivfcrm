@@ -47,6 +47,7 @@ Route::middleware(['auth', 'single.device'])->group(function () {
         Route::post('/', [LeadController::class, 'store'])->middleware('can:leads.create')->name('store');
         // Static paths before the {lead} wildcard, or it swallows them.
         Route::get('/quick-search', [LeadController::class, 'quickSearch'])->name('quick_search');
+        Route::post('/for-number', [LeadController::class, 'forNumber'])->name('for_number');
         Route::get('/assigned-tray', [LeadController::class, 'assignedTray'])->name('assigned_tray');
         Route::get('/{lead}', [LeadController::class, 'show'])->whereNumber('lead')->name('show');
         Route::get('/{lead}/edit', [LeadController::class, 'edit'])->name('edit');
@@ -91,6 +92,8 @@ Route::middleware(['auth', 'single.device'])->group(function () {
         Route::get('/', [AppointmentController::class, 'index'])->name('index');
         Route::post('/', [AppointmentController::class, 'store'])->name('store');
         Route::put('/{appointment}', [AppointmentController::class, 'update'])->name('update');
+        Route::post('/{appointment}/reopen', [AppointmentController::class, 'reopen'])->name('reopen');
+        Route::post('/{appointment}/reopen/decline', [AppointmentController::class, 'declineReopen'])->name('reopen.decline');
         Route::get('/calendar', [AppointmentController::class, 'calendar'])->name('calendar');
     });
 
@@ -119,6 +122,14 @@ Route::middleware(['auth', 'single.device'])->group(function () {
 
     // Tata Teleservices (Smartflo) configuration + two-way sync
     require __DIR__ . '/tata.php';
+
+    // Analytics: the CRM in charts, over the leads created in a date range.
+    // The page needs reports.view; the data feeds the dashboard too and is
+    // scoped to the leads the viewer may see (Lead::scopeForUser).
+    Route::prefix('analytics')->name('analytics.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\CrmAnalyticsController::class, 'index'])->middleware('can:reports.view')->name('index');
+        Route::get('/data', [\App\Http\Controllers\CrmAnalyticsController::class, 'data'])->name('data');
+    });
 
     // Reports
     Route::prefix('reports')->name('reports.')->group(function () {

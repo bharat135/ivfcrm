@@ -116,7 +116,7 @@
                 @php
                     $callsById     = $calls->keyBy('id');
                     $updateIcons   = ['call' => 'bi-telephone-outbound', 'status' => 'bi-flag', 'appointment' => 'bi-calendar-check', 'assignment' => 'bi-person-check', 'followup' => 'bi-calendar-check', 'whatsapp' => 'bi-whatsapp', 'system' => 'bi-pencil'];
-                    $updateFilters = ['' => 'All', 'call' => 'Calls', 'status' => 'Dispositions', 'appointment' => 'Appointments', 'assignment' => 'Owner', 'system' => 'Edits'];
+                    $updateFilters = ['' => 'All', 'call' => 'Calls', 'status' => 'Dispositions', 'followup' => 'Follow-ups', 'appointment' => 'Appointments', 'assignment' => 'Owner', 'system' => 'Edits'];
                     $days          = $timeline->groupBy(fn ($e) => $e->created_at->toDateString());
                 @endphp
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -435,7 +435,8 @@
     </aside>
 </div>
 
-@canany(['appointments.complete', 'appointments.edit', 'appointments.cancel'])
+{{-- appointments.view too: whoever booked an appointment can ask for it to be reopened. --}}
+@canany(['appointments.complete', 'appointments.edit', 'appointments.cancel', 'appointments.view'])
     @include('appointments._support')
 @endcanany
 

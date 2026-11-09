@@ -27,8 +27,14 @@ class Appointment extends Model
         'cancel_reason',
         'cancelled_by',
         'cancelled_at',
+        'reopen_reason',
+        'reopen_requested_by',
+        'reopen_requested_at',
         'reminder_sent',
     ];
+
+    /** The outcomes that close an appointment, and that a reopen takes back. */
+    public const CLOSED = ['visited', 'no_show'];
 
     protected function casts(): array
     {
@@ -37,7 +43,37 @@ class Appointment extends Model
             'duration_minutes' => 'integer',
             'reminder_sent' => 'boolean',
             'cancelled_at' => 'datetime',
+            'reopen_requested_at' => 'datetime',
         ];
+    }
+
+    /** Marked done or no-show: nothing more to do on it unless that was a mistake. */
+    public function isClosed(): bool
+    {
+        return in_array($this->status, self::CLOSED, true);
+    }
+
+    /** Someone has asked for this closed appointment to be reopened; an admin decides. */
+    public function hasReopenRequest(): bool
+    {
+        return $this->reopen_requested_at !== null;
+    }
+
+    /**
+     * Who may ask for a closed appointment to be reopened: anyone who could
+     * have closed it, and whoever booked it. Whether they can see it is the
+     * caller's check (isVisibleTo).
+     */
+    public function canRequestReopen(User $user): bool
+    {
+        return $user->can('reopen_appointments')
+            || $user->can('appointments.complete')
+            || (int) $this->created_by === (int) $user->id;
+    }
+
+    public function scopeReopenRequested(Builder $query): Builder
+    {
+        return $query->whereNotNull('reopen_requested_at');
     }
 
     /**
@@ -74,6 +110,11 @@ class Appointment extends Model
     public function canceller(): BelongsTo
     {
         return $this->belongsTo(User::class, 'cancelled_by');
+    }
+
+    public function reopenRequester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reopen_requested_by');
     }
 
     public function doctor(): BelongsTo

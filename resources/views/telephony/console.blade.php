@@ -219,13 +219,50 @@ $(function () {
         $('#padInput').val($('#padInput').val().slice(0, -1));
     });
 
+    // A hand-dialled number always lands on a lead: the number's existing
+    // enquiry, or a new one owned by this agent. The call is placed against
+    // that lead and its profile opens so the outcome is logged there.
     $('#padCall').on('click', function () {
         const number = $('#padInput').val().trim();
         if (!number) return toastr.warning('Enter a number first.');
 
-        // Reuse the global dialer handler so behaviour stays identical.
-        $('<button>').addClass('js-click-to-call d-none').attr('data-number', number)
-            .appendTo('body').trigger('click').remove();
+        const $btn = $(this).prop('disabled', true);
+
+        $.post(@json(route('leads.for_number')), { mobile: number })
+            .done(res => {
+                toastr.info(res.created
+                    ? 'New enquiry created for ' + number + '.'
+                    : 'Existing enquiry: ' + res.name + (res.owner ? ' (' + res.owner + ')' : '') + '.');
+
+                const payload = { number, lead_id: res.lead_id };
+                const open = () => {
+                    if (!res.can_view) return;
+                    // A browser (WebRTC) call lives in this tab, so the profile opens beside it.
+                    if (window.CrmSoftphone && window.CrmSoftphone.isRegistered()) window.open(res.url, '_blank');
+                    else window.location.href = res.url;
+                };
+
+                if (window.CrmSoftphone && window.CrmSoftphone.isRegistered()) {
+                    window.CrmSoftphone.call(payload, $btn);
+                    open();
+                    return;
+                }
+
+                $.post(window.CrmDialer.routes.dial, payload)
+                    .done(r => {
+                        if (!r.success) return toastr.error(r.message);
+                        toastr.success(r.message);
+                        window.CrmDialer.poll();
+                        open();
+                    })
+                    .fail(xhr => toastr.error(xhr.responseJSON?.message || 'Could not place the call.'))
+                    .always(() => $btn.prop('disabled', false));
+            })
+            .fail(xhr => {
+                const errors = xhr.responseJSON?.errors;
+                toastr.error(errors ? Object.values(errors).flat().join('<br>') : (xhr.responseJSON?.message || 'Could not look up this number.'));
+                $btn.prop('disabled', false);
+            });
     });
 
     $('#padInput').on('keydown', e => {

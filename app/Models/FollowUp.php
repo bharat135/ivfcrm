@@ -27,6 +27,32 @@ class FollowUp extends Model
             ->orWhere('delegated_to', $userId));
     }
 
+    /**
+     * The follow-ups a user's list shows: admins and management see the whole
+     * team's, a centre manager their centre's leads plus their own, and an
+     * agent the ones they must work (forAgent).
+     */
+    public function scopeVisibleTo($query, User $user)
+    {
+        if (static::supervises($user)) {
+            return $query;
+        }
+
+        if ($user->hasRole('Center Manager') && $user->center_id) {
+            return $query->where(fn ($q) => $q
+                ->whereHas('lead', fn ($lead) => $lead->where('center_id', $user->center_id))
+                ->orWhere(fn ($own) => $own->forAgent($user->id)));
+        }
+
+        return $query->forAgent($user->id);
+    }
+
+    /** Whether the user's list covers other agents' follow-ups as well as their own. */
+    public static function supervises(User $user): bool
+    {
+        return $user->hasRole(['Super Admin', 'Admin', 'Management']);
+    }
+
     protected $casts = [
         'scheduled_at'  => 'datetime',
         'completed_at'  => 'datetime',

@@ -81,6 +81,17 @@
                     <option value="0">Normal only</option>
                 </select>
             </div>
+            @if($seesTeam)
+                {{-- Admins and managers see the team's follow-ups; this narrows them to one agent. --}}
+                <div class="col-md-2">
+                    <select class="form-select form-select-sm fu-filter" id="filterAgent">
+                        <option value="">All agents</option>
+                        @foreach($agents as $agent)
+                            <option value="{{ $agent->id }}">{{ $agent->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            @endif
             <div class="col-md-1">
                 <button class="btn btn-outline-secondary btn-sm w-100" id="resetFilters">Reset</button>
             </div>
@@ -97,7 +108,7 @@
                         <th width="28" title="Important"><i class="bi bi-star"></i></th>
                         <th>Lead</th><th>Mobile</th><th>Type</th>
                         <th>Scheduled At</th><th>Status</th><th>Disposition</th>
-                        <th>Remark</th><th width="100">Actions</th>
+                        <th>Agent</th><th>Remark</th><th width="100">Actions</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -123,6 +134,7 @@ const table = $('#fuTable').DataTable({
             d.from           = $('#filterFrom').val();
             d.to             = $('#filterTo').val();
             d.important      = $('#filterImportant').val();
+            d.agent_id       = $('#filterAgent').val();
         }
     },
     createdRow: (row, data) => { if (data.is_important) $(row).addClass('table-warning'); },
@@ -143,6 +155,8 @@ const table = $('#fuTable').DataTable({
             return `<span class="badge bg-${c[d]||'secondary'}">${d}</span>`;
         }},
         { data: 'disposition.name', defaultContent: '—' },
+        // Whose follow-up it is: only worth a column when the list spans a team.
+        { data: 'agent', orderable: false, searchable: false, defaultContent: '—', visible: @json($seesTeam) },
         { data: 'remark', defaultContent: '—', render: d => d ? `<span title="${d}">${d.substring(0,40)}${d.length>40?'...':''}</span>` : '—' },
         { data: 'action', orderable: false, searchable: false },
     ],
@@ -158,6 +172,20 @@ $('#fuTabs .nav-link').on('click', function(e) {
     currentFilter = $(this).data('filter');
     table.ajax.reload();
 });
+
+// Row actions (followups._actions).
+function completeFU(id) {
+    $.post(`/followups/${id}/complete`)
+        .done(() => { toastr.success('Follow-up marked done.'); table.ajax.reload(null, false); })
+        .fail(() => toastr.error('Could not update this follow-up.'));
+}
+
+function cancelFU(id) {
+    if (!confirm('Cancel this follow-up?')) return;
+    $.post(`/followups/${id}/cancel`)
+        .done(() => { toastr.success('Follow-up cancelled.'); table.ajax.reload(null, false); })
+        .fail(() => toastr.error('Could not cancel this follow-up.'));
+}
 
 $('.fu-filter').on('change', () => table.ajax.reload());
 $('#resetFilters').on('click', () => { $('.fu-filter').val(''); table.ajax.reload(); });

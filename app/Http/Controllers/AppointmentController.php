@@ -18,9 +18,11 @@ class AppointmentController extends Controller
 
         if ($request->ajax() || $request->wantsJson()) {
             // Everyone, their centre's, or only the ones they booked: see Appointment::scopeVisibleTo
-            $query = Appointment::with(['patient:id,wife_name,mobile', 'doctor:id,name', 'center:id,name,code', 'canceller:id,name'])
+            $query = Appointment::with(['patient:id,wife_name,mobile', 'doctor:id,name', 'center:id,name,code', 'canceller:id,name', 'reopenRequester:id,name'])
                 ->select('appointments.*')
-                ->visibleTo(Auth::user());
+                ->visibleTo(Auth::user())
+                // Only the ones waiting on an admin to approve a reopen.
+                ->when($request->boolean('reopen'), fn ($q) => $q->reopenRequested());
 
             return DataTables::of($query)
                 ->addColumn('action', fn($a) => view('appointments._actions', ['appointment' => $a])->render())
@@ -31,7 +33,11 @@ class AppointmentController extends Controller
         $centers = Center::active()->get();
         $doctors = Doctor::active()->with('center:id,name')->orderBy('name')->get();
 
-        return view('appointments.index', compact('centers', 'doctors'));
+        $reopenRequests = Auth::user()->can('reopen_appointments')
+            ? Appointment::visibleTo(Auth::user())->reopenRequested()->count()
+            : 0;
+
+        return view('appointments.index', compact('centers', 'doctors', 'reopenRequests'));
     }
 
     public function store(Request $request)
@@ -104,6 +110,10 @@ class AppointmentController extends Controller
         abort_unless($allowed && ($other === [] || $user->can('appointments.edit')), 403,
             'You are not allowed to make this change to the appointment.');
 
+        // Taking back a visit or a no-show goes through reopen(), which needs an admin.
+        abort_if($appointment->isClosed() && in_array($status, ['booked', 'confirmed', 'rescheduled'], true), 422,
+            'This appointment is closed. Reopen it first; that needs admin approval.');
+
         if ($status === 'cancelled') {
             $data['cancelled_by'] = $user->id;
             $data['cancelled_at'] = now();
@@ -132,6 +142,92 @@ class AppointmentController extends Controller
         }
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * An appointment marked done or no-show by mistake goes back to booked.
+     *
+     * Only reopen_appointments (admins) may do that. Anyone else who could
+     * have closed the appointment, or who booked it, sends a request with a
+     * reason; it waits on the appointment until an admin approves it here or
+     * declines it (declineReopen).
+     */
+    public function reopen(Request $request, Appointment $appointment)
+    {
+        $user = Auth::user();
+        abort_unless($appointment->isVisibleTo($user) && $appointment->canRequestReopen($user), 403,
+            'You are not allowed to reopen this appointment.');
+        abort_unless($appointment->isClosed(), 422, 'Only an appointment marked done or no-show can be reopened.');
+
+        $approver = $user->can('reopen_appointments');
+        $pending  = $appointment->hasReopenRequest();
+
+        // Approving a request needs no second reason: the requester gave one.
+        $data = $request->validate([
+            'reason' => [$approver && $pending ? 'nullable' : 'required', 'string', 'min:3', 'max:1000'],
+        ], [
+            'reason.required' => 'Say why this appointment should be reopened.',
+        ]);
+
+        if (! $approver) {
+            abort_if($pending, 422, 'A reopen request for this appointment is already waiting for admin approval.');
+
+            $appointment->update([
+                'reopen_reason'       => $data['reason'],
+                'reopen_requested_by' => $user->id,
+                'reopen_requested_at' => now(),
+            ]);
+
+            $this->logToLead($appointment, 'Appointment reopen requested', $data['reason']);
+
+            return response()->json([
+                'success' => true,
+                'pending' => true,
+                'message' => 'Sent for admin approval. The appointment stays as it is until an admin approves.',
+            ]);
+        }
+
+        $appointment->loadMissing('reopenRequester:id,name', 'patient', 'lead.patient');
+
+        $reason    = ($data['reason'] ?? null) ?: $appointment->reopen_reason;
+        $requester = $pending ? $appointment->reopenRequester?->name : null;
+        $wasVisit  = $appointment->status === 'visited';
+
+        $appointment->update([
+            'status'              => 'booked',
+            'reopen_reason'       => null,
+            'reopen_requested_by' => null,
+            'reopen_requested_at' => null,
+        ]);
+
+        // The visit never happened, so it must not have made anyone a patient.
+        if ($wasVisit) {
+            app(\App\Services\PatientLinker::class)->undoVisit($appointment);
+        }
+
+        $this->logToLead($appointment, 'Appointment reopened',
+            $reason . ($requester ? ' (requested by ' . $requester . ')' : ''));
+
+        return response()->json(['success' => true, 'message' => 'Appointment reopened. It is back to booked.']);
+    }
+
+    public function declineReopen(Appointment $appointment)
+    {
+        $user = Auth::user();
+        abort_unless($appointment->isVisibleTo($user) && $user->can('reopen_appointments'), 403);
+        abort_unless($appointment->hasReopenRequest(), 422, 'There is no reopen request on this appointment.');
+
+        $reason = $appointment->reopen_reason;
+
+        $appointment->update([
+            'reopen_reason'       => null,
+            'reopen_requested_by' => null,
+            'reopen_requested_at' => null,
+        ]);
+
+        $this->logToLead($appointment, 'Appointment reopen declined', $reason);
+
+        return response()->json(['success' => true, 'message' => 'Request declined. The appointment stays as it is.']);
     }
 
     /**

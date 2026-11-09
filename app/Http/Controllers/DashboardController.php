@@ -28,10 +28,10 @@ class DashboardController extends Controller
         $user    = Auth::user();
         $metrics = $this->service->getMetrics($user, $from, $to);
         $team    = $this->service->getTeamPerformance($user, $from, $to);
-        $sourceChart = $this->service->getSourceChart($user->center_id);
-        $dailyTrend  = $this->service->getDailyLeadTrend($user->center_id);
 
-        return view('dashboard.index', compact('user', 'metrics', 'team', 'from', 'to', 'sourceChart', 'dailyTrend'));
+        // The charts load from analytics.data for the same period, so they
+        // follow the range the way the cards and the team table do.
+        return view('dashboard.index', compact('user', 'metrics', 'team', 'from', 'to'));
     }
 
     public function pipeline(Request $request)

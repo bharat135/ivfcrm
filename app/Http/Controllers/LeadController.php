@@ -139,6 +139,58 @@ class LeadController extends Controller
     }
 
     /**
+     * The lead behind a number the agent is about to dial by hand from the
+     * call console. An unknown number becomes a new enquiry on the spot,
+     * owned by the caller, so the call lands on a record and its outcome is
+     * logged on the lead's profile like every other call.
+     */
+    public function forNumber(Request $request)
+    {
+        $request->validate(['mobile' => ['required', 'string', 'max:20', new \App\Rules\IndianMobile()]]);
+
+        $user   = $request->user();
+        $digits = \App\Support\PhoneNumber::indian($request->mobile);
+
+        $lead = Lead::query()
+            ->whereNull('merged_into_id')
+            ->where(fn ($q) => $q->where('dedup_hash', \App\Support\PhoneNumber::dedupHash($digits))
+                ->orWhere('mobile', $digits))
+            ->latest('id')
+            ->first();
+
+        $created = false;
+
+        if (! $lead) {
+            abort_unless($user->can('create', Lead::class), 403, 'You are not allowed to add enquiries.');
+
+            // No name yet: the agent fills it in on the profile after the call.
+            // "Unknown" is a placeholder the patient record knows to overwrite.
+            $lead = $this->service->create([
+                'name'        => 'Unknown',
+                'mobile'      => $digits,
+                'center_id'   => $user->center_id,
+                'assigned_to' => $user->id,
+                'channel'     => AcquisitionChannel::MANUAL,
+                'source_name' => 'manual dial by ' . $user->name,
+            ], autoAssign: false);
+
+            $created = true;
+        }
+
+        $lead->loadMissing('assignedTo:id,name');
+
+        return response()->json([
+            'success'  => true,
+            'created'  => $created,
+            'lead_id'  => $lead->id,
+            'name'     => $lead->name ?: 'Unnamed',
+            'owner'    => $lead->assignedTo?->name,
+            'can_view' => $user->can('view', $lead),
+            'url'      => route('leads.show', $lead),
+        ]);
+    }
+
+    /**
      * Navbar assigned-leads tray. An admin sees every new lead across the
      * telecallers and quality analysts, tagged with its owner; an owner sees
      * only their own. "New" means assigned but not yet called, so a lead drops

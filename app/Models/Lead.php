@@ -133,13 +133,14 @@ class Lead extends Model
         if ($user->hasRole(['Super Admin', 'Management', 'Marketing Head'])) {
             return $query;
         }
+        // Qualified, so the scope survives a join on a table with the same columns.
         if ($user->hasRole('Center Manager')) {
-            return $query->where('center_id', $user->center_id);
+            return $query->where('leads.center_id', $user->center_id);
         }
         if ($user->can('view_all_leads')) {
             return $query;
         }
-        return $query->where('assigned_to', $user->id);
+        return $query->where('leads.assigned_to', $user->id);
     }
 
     public function scopePendingFollowUp($query)

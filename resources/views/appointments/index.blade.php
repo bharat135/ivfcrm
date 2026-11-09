@@ -16,6 +16,14 @@
     @endcan
 </div>
 
+@if($reopenRequests > 0)
+    {{-- Appointments marked done / no-show by mistake, waiting on this admin. --}}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center gap-2 py-2 small" id="reopenBanner">
+        <span><i class="bi bi-hourglass-split me-1"></i><strong>{{ $reopenRequests }}</strong> closed {{ Str::plural('appointment', $reopenRequests) }} waiting for your approval to be reopened.</span>
+        <button type="button" class="btn btn-sm btn-warning" id="toggleReopenFilter">Show them</button>
+    </div>
+@endif
+
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -135,10 +143,23 @@ $('#bookCenter').on('change', filterDoctorsByCenter);
 $('#bookModal').on('show.bs.modal', filterDoctorsByCenter);
 filterDoctorsByCenter();
 
+// The banner narrows the list to the appointments waiting for a reopen approval.
+let reopenOnly = new URLSearchParams(window.location.search).get('reopen') === '1';
+function syncReopenToggle() { $('#toggleReopenFilter').text(reopenOnly ? 'Show all appointments' : 'Show them'); }
+syncReopenToggle();
+$('#toggleReopenFilter').on('click', function () {
+    reopenOnly = !reopenOnly;
+    syncReopenToggle();
+    table.ajax.reload();
+});
+
 const table = $('#appointmentTable').DataTable({
     processing: true, serverSide: true,
     order: [[3, 'desc']],   // Scheduled, newest first
-    ajax: '{{ route("appointments.index") }}',
+    ajax: {
+        url: '{{ route("appointments.index") }}',
+        data: d => { if (reopenOnly) d.reopen = 1; },
+    },
     columns: [
         { data: 'patient.wife_name', defaultContent: '—' },
         { data: 'patient.mobile', defaultContent: '—', className: 'd-none d-md-table-cell' },

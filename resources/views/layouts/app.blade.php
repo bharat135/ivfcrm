@@ -242,6 +242,9 @@
 
         @can('reports.view')
         <div class="nav-label">Reports</div>
+        <a href="{{ route('analytics.index') }}" class="nav-link {{ request()->routeIs('analytics.*') ? 'active' : '' }}">
+            <i class="bi bi-speedometer2"></i> <span>Analytics</span>
+        </a>
         <a href="{{ route('reports.leads') }}" class="nav-link {{ request()->routeIs('reports.leads') ? 'active' : '' }}">
             <i class="bi bi-bar-chart"></i> <span>Lead Report</span>
         </a>

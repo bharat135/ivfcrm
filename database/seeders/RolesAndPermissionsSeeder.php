@@ -36,7 +36,10 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Extra cross-cutting permissions
         // view_mobile_numbers: every role except Telecaller sees full numbers.
-        foreach (['reassign_leads', 'view_all_leads', 'view_own_leads', 'bulk_actions', 'access_api', 'view_mobile_numbers'] as $perm) {
+        // reopen_appointments: put an appointment closed by mistake back to booked, and
+        // approve the requests other users send. Outside appointments.* on purpose,
+        // so the wildcard does not hand it to every role that manages appointments.
+        foreach (['reassign_leads', 'view_all_leads', 'view_own_leads', 'bulk_actions', 'access_api', 'view_mobile_numbers', 'reopen_appointments'] as $perm) {
             Permission::firstOrCreate(['name' => $perm]);
         }
 
@@ -54,7 +57,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'lead_imports.*', 'reports.*', 'settings.*', 'counselling.*', 'treatments.*',
                 'conversations.*', 'whatsapp_templates.*', 'whatsapp_flows.*', 'broadcasts.*', 'landing_pages.*',
                 'integrations.*', 'telephony.*', 'tata.*',
-                'view_all_leads', 'reassign_leads', 'bulk_actions', 'access_api',
+                'view_all_leads', 'reassign_leads', 'bulk_actions', 'access_api', 'reopen_appointments',
             ],
             'Management' => [
                 'leaves.*', 'view_mobile_numbers',
@@ -64,7 +67,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'reports.*', 'counselling.*', 'treatments.*',
                 'conversations.*', 'whatsapp_templates.*', 'whatsapp_flows.*', 'broadcasts.*', 'landing_pages.*',
                 'integrations.view', 'telephony.*', 'tata.view', 'tata.edit',
-                'view_all_leads', 'reassign_leads', 'bulk_actions',
+                'view_all_leads', 'reassign_leads', 'bulk_actions', 'reopen_appointments',
             ],
             'Marketing Head' => [
                 'leaves.view', 'view_mobile_numbers',

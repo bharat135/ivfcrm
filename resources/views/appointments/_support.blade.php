@@ -1,9 +1,31 @@
 {{--
     The dialogs and handlers behind the appointment row actions (mark done,
-    cancel with a reason, reschedule). Included once per page that renders
-    appointments._actions. After a change the page calls apptAfterUpdate():
-    the appointments list reloads its table, any other page reloads itself.
+    cancel with a reason, reschedule, reopen one closed by mistake). Included
+    once per page that renders appointments._actions. After a change the page
+    calls apptAfterUpdate(): the appointments list reloads its table, any other
+    page reloads itself.
 --}}
+<div class="modal fade" id="reopenModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">Reopen Appointment</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3" id="reopenHint"></p>
+                <label class="form-label small fw-semibold" for="reopenReason">Reason <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="reopenReason" rows="3" maxlength="1000" placeholder="e.g. Marked done by mistake, the patient has not visited yet"></textarea>
+                <div class="invalid-feedback">Give a reason (at least 3 characters).</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Keep as it is</button>
+                <button type="button" class="btn btn-primary btn-sm" id="confirmReopen">Reopen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="cancelModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -76,6 +98,41 @@ $('#confirmCancel').on('click', function () {
     if (reason.length < 3) { $('#cancelReason').addClass('is-invalid'); return; }
     apptUpdate(apptCancelUrl, { status: 'cancelled', cancel_reason: reason })
         .done(() => bootstrap.Modal.getInstance($('#cancelModal')[0]).hide());
+});
+
+// Reopen: an admin puts a done / no-show appointment back to booked; anyone
+// else sends the same form as a request that waits for an admin.
+function apptReopen(url, data) {
+    return $.post(url, data)
+        .done(res => { toastr.success(res.message || 'Appointment updated.'); apptAfterUpdate(); })
+        .fail(x => toastr.error(
+            x.responseJSON?.errors?.reason?.[0]
+            || x.responseJSON?.message
+            || 'Could not reopen the appointment.'));
+}
+
+let apptReopenUrl = null;
+$(document).on('click', '.js-appt-reopen', function () {
+    const direct = String($(this).data('direct')) === '1';
+    apptReopenUrl = $(this).data('url');
+    $('#reopenReason').val('').removeClass('is-invalid');
+    $('#reopenHint').text(direct
+        ? 'The appointment goes back to booked. If this visit is what gave the patient their ID, the ID is taken back too.'
+        : 'Your request goes to an admin. The appointment stays as it is until an admin approves.');
+    $('#confirmReopen').text(direct ? 'Reopen' : 'Send for approval');
+    bootstrap.Modal.getOrCreateInstance($('#reopenModal')[0]).show();
+});
+$('#confirmReopen').on('click', function () {
+    const reason = $('#reopenReason').val().trim();
+    if (reason.length < 3) { $('#reopenReason').addClass('is-invalid'); return; }
+    apptReopen(apptReopenUrl, { reason })
+        .done(() => bootstrap.Modal.getInstance($('#reopenModal')[0]).hide());
+});
+$(document).on('click', '.js-appt-reopen-approve', function () {
+    if (confirm($(this).data('request') + '\n\nApprove and put this appointment back to booked?')) apptReopen($(this).data('url'), {});
+});
+$(document).on('click', '.js-appt-reopen-decline', function () {
+    if (confirm($(this).data('request') + '\n\nDecline this request? The appointment stays as it is.')) apptReopen($(this).data('url'), {});
 });
 
 const reschedulePicker = flatpickr('#rescheduleAt', { enableTime: true, altInput: true, altFormat: 'd-m-Y h:i K', dateFormat: 'Y-m-d H:i', minDate: 'today', minuteIncrement: 15 });

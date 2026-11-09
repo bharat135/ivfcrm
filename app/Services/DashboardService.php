@@ -88,34 +88,6 @@ class DashboardService
         return $report->build($from, $to, $agents);
     }
 
-    public function getSourceChart(?int $centerId = null, int $days = 30): array
-    {
-        return Lead::selectRaw('lead_source_id, COUNT(*) as total')
-            ->with('source:id,name,channel')
-            ->whereDate('created_at', '>=', now()->subDays($days))
-            ->when($centerId, fn($q) => $q->where('center_id', $centerId))
-            ->groupBy('lead_source_id')
-            ->orderByDesc('total')
-            ->get()
-            ->map(fn($row) => [
-                'source' => $row->source?->name ?? 'Unknown',
-                'total'  => $row->total,
-            ])
-            ->toArray();
-    }
-
-    public function getDailyLeadTrend(?int $centerId = null, int $days = 14): array
-    {
-        return Lead::selectRaw('DATE(created_at) as date, COUNT(*) as total')
-            ->whereDate('created_at', '>=', now()->subDays($days))
-            ->when($centerId, fn($q) => $q->where('center_id', $centerId))
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get()
-            ->map(fn($row) => ['date' => $row->date, 'total' => $row->total])
-            ->toArray();
-    }
-
     public function getPipelineKanban(?int $centerId = null): array
     {
         $stages = \App\Models\PipelineStage::active()->get();

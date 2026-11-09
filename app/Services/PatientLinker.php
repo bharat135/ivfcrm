@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Jobs\ReportConversionJob;
+use App\Models\Appointment;
 use App\Models\Lead;
 use App\Models\Patient;
 use App\Support\PatientJourney;
@@ -76,6 +77,39 @@ class PatientLinker
         $patient = $subject instanceof Lead ? $this->ensureFor($subject) : $subject;
 
         return $patient?->register();
+    }
+
+    /**
+     * A visit that was marked by mistake is taken back. If that visit is what
+     * turned the enquiry into a patient, the patient ID and the first-visit
+     * stamp go with it; someone registered at the front desk, with another
+     * visit on file or already in treatment stays a patient.
+     */
+    public function undoVisit(Appointment $appointment): void
+    {
+        $patient = $appointment->patient ?: $appointment->lead?->patient;
+
+        if (! $patient || ! $patient->isRegistered()) {
+            return;
+        }
+
+        // Registered before this appointment was even booked: not by this visit.
+        if ($appointment->created_at && $patient->registered_at->lt($appointment->created_at)) {
+            return;
+        }
+
+        $otherVisit = Appointment::query()
+            ->whereKeyNot($appointment->getKey())
+            ->where('status', 'visited')
+            ->where(fn ($q) => $q->where('patient_id', $patient->id)
+                ->when($patient->lead_id, fn ($q) => $q->orWhere('lead_id', $patient->lead_id)))
+            ->exists();
+
+        if ($otherVisit || $patient->treatmentCycles()->exists()) {
+            return;
+        }
+
+        $patient->forceFill(['patient_code' => null, 'registered_at' => null])->saveQuietly();
     }
 
     /**
