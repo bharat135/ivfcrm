@@ -129,12 +129,12 @@
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-transparent d-flex justify-content-between align-items-start flex-wrap gap-2">
-                <div><div class="fw-semibold">Top agents</div><div class="an-sub">Ranked by consultations visited from the leads assigned to them in the range</div></div>
+                <div><div class="fw-semibold">Top agents</div><div class="an-sub">Ranked by consultations visited from the leads assigned to them in the range. Booking = went on to treatment.</div></div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="anAgentsCsv"><i class="bi bi-download me-1"></i>CSV</button>
             </div>
             <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle mb-0 small an-agents">
-                    <thead class="table-light"><tr><th>#</th><th>Agent</th><th class="text-end">Leads</th><th class="text-end">Dials</th><th class="text-end">Connected</th><th class="text-end">Booked</th><th class="text-end">Visited</th><th class="text-end">Won</th><th>Lead → visit</th></tr></thead>
+                    <thead class="table-light"><tr><th>#</th><th>Agent</th><th class="text-end">Leads</th><th class="text-end">Dials</th><th class="text-end">Connected</th><th class="text-end">Appointment</th><th class="text-end">Visited</th><th class="text-end" title="Went on to treatment: a cycle opened, or the enquiry closed as won">Booking</th><th>Lead → visit</th></tr></thead>
                     <tbody id="agentsBody"><tr><td colspan="9" class="text-center text-muted py-4">Loading…</td></tr></tbody>
                 </table>
             </div>
@@ -254,8 +254,8 @@ $(function () {
 
     $('#anAgentsCsv').on('click', function () {
         if (!lastData?.agents?.length) return toastr.info('Nothing to export.');
-        const head = ['Rank', 'Agent', 'Leads', 'Dials', 'Connected', 'Booked', 'Visited', 'Won', 'Lead to visit %'];
-        const lines = [head].concat(lastData.agents.map(r => [r.rank, r.name, r.leads, r.dials, r.connected, r.booked, r.visited, r.won, r.visit_rate]));
+        const head = ['Rank', 'Agent', 'Leads', 'Dials', 'Connected', 'Appointment', 'Visited', 'Booking', 'Lead to visit %'];
+        const lines = [head].concat(lastData.agents.map(r => [r.rank, r.name, r.leads, r.dials, r.connected, r.appointments, r.visited, r.bookings, r.visit_rate]));
         const csv = lines.map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));

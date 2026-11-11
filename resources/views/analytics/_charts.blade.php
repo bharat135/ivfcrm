@@ -201,9 +201,9 @@ window.CrmCharts = (function () {
                 <td class="text-end">${num(r.leads)}</td>
                 <td class="text-end">${num(r.dials)}</td>
                 <td class="text-end">${num(r.connected)}</td>
-                <td class="text-end">${num(r.booked)}</td>
+                <td class="text-end">${num(r.appointments)}</td>
                 <td class="text-end fw-semibold">${num(r.visited)}</td>
-                <td class="text-end">${num(r.won)}</td>
+                <td class="text-end">${num(r.bookings)}</td>
                 <td><div class="d-flex align-items-center gap-2"><div class="bar flex-grow-1"><i style="width:${Math.round(r.visit_rate / max * 100)}%"></i></div><span class="text-end" style="width:44px">${r.visit_rate}%</span></div></td>
             </tr>`).join(''));
     }

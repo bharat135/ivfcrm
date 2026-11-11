@@ -357,7 +357,9 @@ class CrmAnalytics
             ->selectRaw('SUM(leads.first_contacted_at IS NOT NULL OR leads.contact_attempts > 0) AS contacted')
             ->selectRaw("SUM(EXISTS (SELECT 1 FROM appointments a WHERE a.lead_id = leads.id AND a.deleted_at IS NULL AND a.status <> 'cancelled')) AS booked")
             ->selectRaw("SUM(EXISTS (SELECT 1 FROM appointments a WHERE a.lead_id = leads.id AND a.deleted_at IS NULL AND a.status = 'visited')) AS visited")
-            ->selectRaw("SUM(leads.status = 'won') AS won")
+            // A booking is a couple who went on to treatment: a cycle opened,
+            // the patient file in treatment, or the lead closed as won.
+            ->selectRaw("SUM(leads.status = 'won' OR EXISTS (SELECT 1 FROM patients p WHERE p.id = leads.patient_id AND p.deleted_at IS NULL AND (p.journey_stage IN ('treatment', 'closed') OR EXISTS (SELECT 1 FROM treatment_cycles t WHERE t.patient_id = p.id)))) AS bookings")
             ->groupBy('leads.assigned_to', 'users.name')
             ->orderByDesc('visited')
             ->orderByDesc('booked')
@@ -388,9 +390,9 @@ class CrmAnalytics
                 'contacted' => (int) $r->contacted,
                 'dials'     => (int) ($call->dials ?? 0),
                 'connected' => (int) ($call->connected ?? 0),
-                'booked'    => (int) $r->booked,
+                'appointments' => (int) $r->booked,
                 'visited'   => (int) $r->visited,
-                'won'       => (int) $r->won,
+                'bookings'  => (int) $r->bookings,
                 'visit_rate' => $leads > 0 ? round((int) $r->visited / $leads * 100, 1) : 0.0,
             ];
         })->all();

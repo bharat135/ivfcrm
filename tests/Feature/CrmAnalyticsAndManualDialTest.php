@@ -113,7 +113,15 @@ class CrmAnalyticsAndManualDialTest extends TestCase
 
         $top = collect($data['agents'])->firstWhere('user_id', $agent->id);
         $this->assertSame(2, $top['leads']);
+        $this->assertSame(2, $top['appointments']);
         $this->assertSame(1, $top['visited']);
+        $this->assertSame(0, $top['bookings']);
+
+        // A couple who went on to treatment is a booking for the agent.
+        Cache::flush();
+        $visited->patient->forceFill(['journey_stage' => 'treatment'])->save();
+        $again = $this->actingAs($admin)->getJson(route('analytics.data', $range + ['center_id' => $center->id]))->assertOk()->json();
+        $this->assertSame(1, collect($again['agents'])->firstWhere('user_id', $agent->id)['bookings']);
 
         $this->assertCount(7, $data['heatmap']);
         $this->assertSame(2, array_sum(array_map(fn ($d) => array_sum($d['hours']), $data['heatmap'])));
