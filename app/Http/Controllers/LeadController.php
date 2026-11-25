@@ -59,15 +59,17 @@ class LeadController extends Controller
                     $q->where('mobile', 'like', "%{$needle}%");
                 })
                 ->addColumn('origin', fn (Lead $lead) => view('leads._origin', compact('lead'))->render())
-                // Sub-source: the specific lead source name (Facebook form,
-                // Website, referral…), a level below the channel in "Came from".
-                ->addColumn('sub_source', fn (Lead $lead) => $lead->source?->name ?: ($lead->utm_source ?: '—'))
+                // Sub-source: the one given on a bulk upload, else the specific
+                // lead source name (Facebook form, Website, referral…), a level
+                // below the channel in "Came from".
+                ->addColumn('sub_source', fn (Lead $lead) => $lead->sub_source ?: ($lead->source?->name ?: ($lead->utm_source ?: '—')))
                 ->addColumn('campaign_name', fn (Lead $lead) => $lead->campaign?->name ?: '—')
                 ->editColumn('assigned_at', fn (Lead $lead) => $lead->assigned_at?->toIso8601String())
                 ->editColumn('created_at', fn (Lead $lead) => $lead->created_at?->toIso8601String())
                 ->filterColumn('sub_source', function ($q, $keyword) {
                     $q->where(function ($w) use ($keyword) {
-                        $w->whereHas('source', fn ($s) => $s->where('name', 'like', "%{$keyword}%"))
+                        $w->where('leads.sub_source', 'like', "%{$keyword}%")
+                          ->orWhereHas('source', fn ($s) => $s->where('name', 'like', "%{$keyword}%"))
                           ->orWhere('utm_source', 'like', "%{$keyword}%");
                     });
                 })

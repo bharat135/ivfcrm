@@ -63,6 +63,16 @@
                             </select>
                         </div>
 
+                        <div class="mb-3">
+                            <label class="form-label">Default Sub Source <small class="text-muted">(used when a row has no sub source)</small></label>
+                            <input type="text" name="default_sub_source" maxlength="150"
+                                   class="form-control @error('default_sub_source') is-invalid @enderror"
+                                   value="{{ old('default_sub_source') }}" placeholder="e.g. Panvel camp, November">
+                            @error('default_sub_source')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
                         <div class="mb-4">
                             <label class="form-label">If duplicate mobile found</label>
                             <div class="d-flex gap-3">
@@ -111,7 +121,8 @@
                             <tr><td><code>city</code></td>       <td>No</td><td>City name (exact)</td></tr>
                             <tr><td><code>pincode</code></td>    <td>No</td><td>6-digit PIN</td></tr>
                             <tr><td><code>source</code></td>     <td>No</td><td>Lead source name</td></tr>
-                            <tr><td><code>remark</code></td>     <td>No</td><td>Any notes</td></tr>
+                            <tr><td><code>sub_source</code></td> <td>No</td><td>Free text under the source, e.g. the camp or campaign name</td></tr>
+                            <tr><td><code>remark</code></td>    <td>No</td><td>Any notes</td></tr>
                             <tr><td><code>lead_date</code></td>  <td>No</td><td>DD-MM-YYYY, DD/MM/YYYY or YYYY-MM-DD (also read from <code>date</code>)</td></tr>
                         </tbody>
                     </table>

@@ -20,7 +20,7 @@ class Lead extends Model
     protected $fillable = [
         'uuid', 'name', 'mobile', 'alt_mobile', 'email', 'gender', 'age',
         'city_id', 'state_id', 'pincode',
-        'lead_source_id', 'campaign_id', 'adset_id', 'ad_id',
+        'lead_source_id', 'sub_source', 'campaign_id', 'adset_id', 'ad_id',
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
         'gclid', 'gbraid', 'wbraid', 'fbclid', 'channel',
         'external_lead_id', 'center_id', 'assigned_to', 'assigned_at',

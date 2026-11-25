@@ -23,13 +23,13 @@ class LeadImportController extends Controller
     private const SAMPLE_HEADERS = [
         'name', 'mobile', 'alt_mobile', 'email',
         'gender', 'age', 'state', 'city', 'pincode',
-        'source', 'remark', 'lead_date',
+        'source', 'sub_source', 'remark', 'lead_date',
     ];
 
     private const SAMPLE_ROW = [
         'Priya Sharma', '9876543210', '9876543211', 'priya@example.com',
         'female', '32', 'Maharashtra', 'Mumbai', '400001',
-        'Facebook', 'Interested in IVF treatment', '2026-06-24',
+        'Facebook', 'Free IVF Camp', 'Interested in IVF treatment', '2026-06-24',
     ];
 
     public function index()
@@ -68,6 +68,7 @@ class LeadImportController extends Controller
             'csv_file'        => ['required', 'file', 'mimes:csv,txt,xlsx,xls', 'max:20480'],
             'center_id'       => ['nullable', 'exists:centers,id'],
             'default_source_id' => ['nullable', 'exists:lead_sources,id'],
+            'default_sub_source' => ['nullable', 'string', 'max:150'],
             'on_duplicate'    => ['required', 'in:skip,update'],
         ], [
             'csv_file.mimes' => 'Upload a CSV or Excel file (.csv, .xlsx, .xls).',
@@ -88,6 +89,7 @@ class LeadImportController extends Controller
             'status'            => 'processing',
             'options'           => [
                 'default_source_id' => $request->default_source_id,
+                'default_sub_source' => trim((string) $request->default_sub_source) ?: null,
                 'on_duplicate'      => $request->on_duplicate,
             ],
             'started_at' => now(),
@@ -213,6 +215,7 @@ class LeadImportController extends Controller
         'city'       => ['city'],
         'pincode'    => ['pincode', 'pin_code', 'pin', 'zip'],
         'source'     => ['source', 'lead_source'],
+        'sub_source' => ['sub_source', 'subsource', 'lead_sub_source', 'source_detail'],
         'center'     => ['center', 'centre', 'branch'],
         'remark'     => ['remark', 'remarks', 'note', 'notes', 'comment', 'comments'],
         'lead_date'  => ['lead_date', 'date', 'enquiry_date', 'created_date', 'created_at'],
@@ -437,6 +440,9 @@ class LeadImportController extends Controller
             }
         }
 
+        // The row's own sub-source wins over the one chosen for the whole upload
+        $subSource = ($values['sub_source'] ?? '') ?: ($import->options['default_sub_source'] ?? null);
+
         $centerId = $import->center_id;
         $centerName = strtolower($values['center'] ?? '');
         if ($centerName !== '') {
@@ -480,6 +486,7 @@ class LeadImportController extends Controller
             'pincode'       => ($values['pincode'] ?? '') ?: null,
             'remark'        => $remark !== '' ? $remark : null,
             'lead_source_id'=> $sourceId,
+            'sub_source'    => $subSource ? Str::limit($subSource, 150, '') : null,
             'center_id'     => $centerId,
             'lead_date'     => $this->parseDate($values['lead_date'] ?? '') ?? now(),
             'status'        => 'new',

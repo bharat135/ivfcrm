@@ -94,6 +94,22 @@ class LeadImportTest extends TestCase
         $this->assertSame('from xlsx', $lead->remark);
     }
 
+    public function test_sub_source_comes_from_the_row_or_falls_back_to_the_upload_default(): void
+    {
+        $content = "name,mobile,Sub Source\nRow Sub,9876501266,Free IVF Camp\nDefault Sub,9876501255,\n";
+
+        $this->actingAs($this->admin)->post(route('imports.store'), [
+            'csv_file'           => UploadedFile::fake()->createWithContent('s.csv', $content),
+            'on_duplicate'       => 'skip',
+            'default_sub_source' => 'Panvel camp',
+        ])->assertRedirect();
+
+        $row = Lead::where('mobile', '9876501266')->first();
+        $this->assertSame('Free IVF Camp', $row->sub_source);
+        $this->assertNull($row->remark);
+        $this->assertSame('Panvel camp', Lead::where('mobile', '9876501255')->first()->sub_source);
+    }
+
     public function test_a_number_already_in_the_crm_counts_as_a_duplicate(): void
     {
         Lead::create(['name' => 'Existing', 'mobile' => '9876501277', 'status' => 'new']);
